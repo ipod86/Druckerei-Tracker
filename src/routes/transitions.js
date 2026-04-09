@@ -5,44 +5,54 @@ const router = express.Router();
 const db = require('../db/database');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 
-// GET / - all transition fields grouped by to_group_id
+// GET / - all named transitions with their fields
 router.get('/', requireAuth, (req, res) => {
-  const fields = db.prepare(`
-    SELECT tf.*, g1.name as from_group_name, g2.name as to_group_name
-    FROM transition_fields tf
-    LEFT JOIN groups g1 ON tf.from_group_id = g1.id
-    JOIN groups g2 ON tf.to_group_id = g2.id
-    ORDER BY tf.to_group_id, tf.order_index
+  const transitions = db.prepare(`
+    SELECT t.*, g1.name as from_group_name, g2.name as to_group_name
+    FROM transitions t
+    LEFT JOIN groups g1 ON t.from_group_id = g1.id
+    JOIN groups g2 ON t.to_group_id = g2.id
+    ORDER BY t.to_group_id, t.order_index, t.id
   `).all();
 
-  // Parse field_options
-  for (const f of fields) {
-    if (f.field_options) {
-      try { f.field_options = JSON.parse(f.field_options); } catch (e) { f.field_options = []; }
+  for (const t of transitions) {
+    const fields = db.prepare(`
+      SELECT * FROM transition_fields WHERE transition_id = ? ORDER BY order_index
+    `).all(t.id);
+    for (const f of fields) {
+      if (f.field_options) {
+        try { f.field_options = JSON.parse(f.field_options); } catch (e) { f.field_options = []; }
+      }
     }
+    t.fields = fields;
   }
 
-  // Group by to_group_id
-  const grouped = {};
-  for (const f of fields) {
-    if (!grouped[f.to_group_id]) grouped[f.to_group_id] = [];
-    grouped[f.to_group_id].push(f);
-  }
-
-  res.json(grouped);
+  res.json(transitions);
 });
 
-// GET /group/:toGroupId
+// GET /group/:toGroupId - flat field list for move modal (with transition info)
 router.get('/group/:toGroupId', requireAuth, (req, res) => {
-  const fields = db.prepare(`
-    SELECT tf.*, g1.name as from_group_name, g2.name as to_group_name
-    FROM transition_fields tf
-    LEFT JOIN groups g1 ON tf.from_group_id = g1.id
-    JOIN groups g2 ON tf.to_group_id = g2.id
-    WHERE tf.to_group_id = ?
-    ORDER BY tf.order_index
-  `).all(req.params.toGroupId);
+  const fromGroupId = req.query.from;
 
+  let query = `
+    SELECT tf.*, t.name as transition_name, t.id as transition_id,
+           g1.name as from_group_name, g2.name as to_group_name
+    FROM transition_fields tf
+    JOIN transitions t ON tf.transition_id = t.id
+    LEFT JOIN groups g1 ON t.from_group_id = g1.id
+    JOIN groups g2 ON t.to_group_id = g2.id
+    WHERE t.to_group_id = ?
+  `;
+  const params = [req.params.toGroupId];
+
+  if (fromGroupId) {
+    query += ` AND (t.from_group_id IS NULL OR t.from_group_id = ?)`;
+    params.push(fromGroupId);
+  }
+
+  query += ` ORDER BY t.order_index, t.id, tf.order_index`;
+
+  const fields = db.prepare(query).all(...params);
   for (const f of fields) {
     if (f.field_options) {
       try { f.field_options = JSON.parse(f.field_options); } catch (e) { f.field_options = []; }
@@ -52,19 +62,116 @@ router.get('/group/:toGroupId', requireAuth, (req, res) => {
   res.json(fields);
 });
 
-// POST /
+// POST / - create named transition
 router.post('/', requireAdmin, (req, res) => {
-  const { from_group_id, to_group_id, field_name, field_type, field_options, required, order_index } = req.body;
-  if (!to_group_id || !field_name) return res.status(400).json({ error: 'to_group_id and field_name required' });
+  const { name, from_group_id, to_group_id } = req.body;
+  if (!name || !to_group_id) return res.status(400).json({ error: 'name and to_group_id required' });
 
-  const maxOrder = db.prepare('SELECT MAX(order_index) as mx FROM transition_fields WHERE to_group_id = ?').get(to_group_id);
-
+  const maxOrder = db.prepare('SELECT MAX(order_index) as mx FROM transitions WHERE to_group_id = ?').get(to_group_id);
   const result = db.prepare(`
-    INSERT INTO transition_fields (from_group_id, to_group_id, field_name, field_type, field_options, required, order_index)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO transitions (name, from_group_id, to_group_id, order_index)
+    VALUES (?, ?, ?, ?)
+  `).run(name, from_group_id || null, to_group_id, (maxOrder.mx || 0) + 1);
+
+  const transition = db.prepare(`
+    SELECT t.*, g1.name as from_group_name, g2.name as to_group_name
+    FROM transitions t
+    LEFT JOIN groups g1 ON t.from_group_id = g1.id
+    JOIN groups g2 ON t.to_group_id = g2.id
+    WHERE t.id = ?
+  `).get(result.lastInsertRowid);
+  transition.fields = [];
+  res.status(201).json(transition);
+});
+
+// PUT /fields/:fieldId - edit a field (must come before PUT /:id)
+router.put('/fields/:fieldId', requireAdmin, (req, res) => {
+  const field = db.prepare('SELECT * FROM transition_fields WHERE id = ?').get(req.params.fieldId);
+  if (!field) return res.status(404).json({ error: 'Field not found' });
+
+  const { field_name, field_type, field_options, required, order_index } = req.body;
+
+  db.prepare(`
+    UPDATE transition_fields SET
+      field_name = COALESCE(?, field_name),
+      field_type = COALESCE(?, field_type),
+      field_options = ?,
+      required = COALESCE(?, required),
+      order_index = COALESCE(?, order_index)
+    WHERE id = ?
   `).run(
-    from_group_id || null,
-    to_group_id,
+    field_name || null,
+    field_type || null,
+    field_options !== undefined ? JSON.stringify(field_options) : field.field_options,
+    required !== undefined ? (required ? 1 : 0) : null,
+    order_index !== undefined ? order_index : null,
+    req.params.fieldId
+  );
+
+  const updated = db.prepare('SELECT * FROM transition_fields WHERE id = ?').get(req.params.fieldId);
+  if (updated.field_options) try { updated.field_options = JSON.parse(updated.field_options); } catch (e) {}
+  res.json(updated);
+});
+
+// DELETE /fields/:fieldId (must come before DELETE /:id)
+router.delete('/fields/:fieldId', requireAdmin, (req, res) => {
+  db.prepare('DELETE FROM transition_fields WHERE id = ?').run(req.params.fieldId);
+  res.json({ success: true });
+});
+
+// PUT /:id - edit named transition
+router.put('/:id', requireAdmin, (req, res) => {
+  const t = db.prepare('SELECT * FROM transitions WHERE id = ?').get(req.params.id);
+  if (!t) return res.status(404).json({ error: 'Transition not found' });
+
+  const { name, from_group_id, to_group_id } = req.body;
+
+  db.prepare(`
+    UPDATE transitions SET
+      name = COALESCE(?, name),
+      from_group_id = ?,
+      to_group_id = COALESCE(?, to_group_id)
+    WHERE id = ?
+  `).run(
+    name || null,
+    from_group_id !== undefined ? (from_group_id || null) : t.from_group_id,
+    to_group_id || null,
+    req.params.id
+  );
+
+  const updated = db.prepare(`
+    SELECT t.*, g1.name as from_group_name, g2.name as to_group_name
+    FROM transitions t
+    LEFT JOIN groups g1 ON t.from_group_id = g1.id
+    JOIN groups g2 ON t.to_group_id = g2.id
+    WHERE t.id = ?
+  `).get(req.params.id);
+  res.json(updated);
+});
+
+// DELETE /:id - delete transition and its fields
+router.delete('/:id', requireAdmin, (req, res) => {
+  db.prepare('DELETE FROM transition_fields WHERE transition_id = ?').run(req.params.id);
+  db.prepare('DELETE FROM transitions WHERE id = ?').run(req.params.id);
+  res.json({ success: true });
+});
+
+// POST /:id/fields - add field to a transition
+router.post('/:id/fields', requireAdmin, (req, res) => {
+  const t = db.prepare('SELECT * FROM transitions WHERE id = ?').get(req.params.id);
+  if (!t) return res.status(404).json({ error: 'Transition not found' });
+
+  const { field_name, field_type, field_options, required, order_index } = req.body;
+  if (!field_name) return res.status(400).json({ error: 'field_name required' });
+
+  const maxOrder = db.prepare('SELECT MAX(order_index) as mx FROM transition_fields WHERE transition_id = ?').get(t.id);
+  const result = db.prepare(`
+    INSERT INTO transition_fields (transition_id, from_group_id, to_group_id, field_name, field_type, field_options, required, order_index)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    t.id,
+    t.from_group_id,
+    t.to_group_id,
     field_name,
     field_type || 'text',
     field_options ? JSON.stringify(field_options) : null,
@@ -75,44 +182,6 @@ router.post('/', requireAdmin, (req, res) => {
   const field = db.prepare('SELECT * FROM transition_fields WHERE id = ?').get(result.lastInsertRowid);
   if (field.field_options) try { field.field_options = JSON.parse(field.field_options); } catch (e) {}
   res.status(201).json(field);
-});
-
-// PUT /:id
-router.put('/:id', requireAdmin, (req, res) => {
-  const { from_group_id, to_group_id, field_name, field_type, field_options, required, order_index } = req.body;
-  const field = db.prepare('SELECT * FROM transition_fields WHERE id = ?').get(req.params.id);
-  if (!field) return res.status(404).json({ error: 'Field not found' });
-
-  db.prepare(`
-    UPDATE transition_fields SET
-      from_group_id = ?,
-      to_group_id = COALESCE(?, to_group_id),
-      field_name = COALESCE(?, field_name),
-      field_type = COALESCE(?, field_type),
-      field_options = ?,
-      required = COALESCE(?, required),
-      order_index = COALESCE(?, order_index)
-    WHERE id = ?
-  `).run(
-    from_group_id !== undefined ? from_group_id : field.from_group_id,
-    to_group_id || null,
-    field_name || null,
-    field_type || null,
-    field_options !== undefined ? JSON.stringify(field_options) : field.field_options,
-    required !== undefined ? (required ? 1 : 0) : null,
-    order_index || null,
-    req.params.id
-  );
-
-  const updated = db.prepare('SELECT * FROM transition_fields WHERE id = ?').get(req.params.id);
-  if (updated.field_options) try { updated.field_options = JSON.parse(updated.field_options); } catch (e) {}
-  res.json(updated);
-});
-
-// DELETE /:id
-router.delete('/:id', requireAdmin, (req, res) => {
-  db.prepare('DELETE FROM transition_fields WHERE id = ?').run(req.params.id);
-  res.json({ success: true });
 });
 
 module.exports = router;

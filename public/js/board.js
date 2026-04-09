@@ -262,7 +262,7 @@ async function executeDrop(cardId, sourceColumnId, targetColEl) {
 
     if (targetGroupId !== sourceGroupId) {
       try {
-        const fields = await apiFetch(`/api/transitions/group/${targetGroupId}`);
+        const fields = await apiFetch(`/api/transitions/group/${targetGroupId}?from=${sourceGroupId}`);
         if (fields && fields.length > 0) {
           showMoveModal(cardId, targetColumnId, targetGroupId, fields);
           return;
@@ -299,6 +299,19 @@ function showMoveModal(cardId, targetColumnId, targetGroupId, fields) {
     if (grp) targetGroupName = grp.name;
   }
 
+  // Group fields by transition
+  const byTransition = {};
+  const transitionOrder = [];
+  for (const f of fields) {
+    const key = f.transition_id || 0;
+    if (!byTransition[key]) {
+      byTransition[key] = { name: f.transition_name || '', fields: [] };
+      transitionOrder.push(key);
+    }
+    byTransition[key].fields.push(f);
+  }
+  const multipleTransitions = transitionOrder.length > 1;
+
   let fieldsHtml = `<div class="modal-body">`;
 
   if (targetGroupName) {
@@ -313,26 +326,32 @@ function showMoveModal(cardId, targetColumnId, targetGroupId, fields) {
 
   if (fields.length > 0) {
     fieldsHtml += `<div class="transition-fields-list">`;
-    for (const field of fields) {
-      const typeIcon = field.field_type === 'date' ? '📅' : field.field_type === 'select' ? '▾' : field.field_type === 'textarea' ? '¶' : '✏️';
-      fieldsHtml += `<div class="transition-field">
-        <label class="${field.required ? 'required' : ''}">
-          <span class="tf-icon">${typeIcon}</span>${escapeHtml(field.field_name)}
-        </label>`;
-
-      if (field.field_type === 'select' && Array.isArray(field.field_options)) {
-        fieldsHtml += `<select name="tf_${field.id}" ${field.required ? 'required' : ''}>
-          <option value="">Bitte wählen...</option>
-          ${field.field_options.map(opt => `<option value="${escapeHtml(opt)}">${escapeHtml(opt)}</option>`).join('')}
-        </select>`;
-      } else if (field.field_type === 'date') {
-        fieldsHtml += `<input type="date" name="tf_${field.id}" ${field.required ? 'required' : ''}>`;
-      } else if (field.field_type === 'textarea') {
-        fieldsHtml += `<textarea name="tf_${field.id}" rows="3" ${field.required ? 'required' : ''}></textarea>`;
-      } else {
-        fieldsHtml += `<input type="text" name="tf_${field.id}" ${field.required ? 'required' : ''}>`;
+    for (const tid of transitionOrder) {
+      const tg = byTransition[tid];
+      if (multipleTransitions && tg.name) {
+        fieldsHtml += `<div class="transition-subheader">${escapeHtml(tg.name)}</div>`;
       }
-      fieldsHtml += '</div>';
+      for (const field of tg.fields) {
+        const typeIcon = field.field_type === 'date' ? '📅' : field.field_type === 'select' ? '▾' : field.field_type === 'textarea' ? '¶' : '✏️';
+        fieldsHtml += `<div class="transition-field">
+          <label class="${field.required ? 'required' : ''}">
+            <span class="tf-icon">${typeIcon}</span>${escapeHtml(field.field_name)}
+          </label>`;
+
+        if (field.field_type === 'select' && Array.isArray(field.field_options)) {
+          fieldsHtml += `<select name="tf_${field.id}" ${field.required ? 'required' : ''}>
+            <option value="">Bitte wählen...</option>
+            ${field.field_options.map(opt => `<option value="${escapeHtml(opt)}">${escapeHtml(opt)}</option>`).join('')}
+          </select>`;
+        } else if (field.field_type === 'date') {
+          fieldsHtml += `<input type="date" name="tf_${field.id}" ${field.required ? 'required' : ''}>`;
+        } else if (field.field_type === 'textarea') {
+          fieldsHtml += `<textarea name="tf_${field.id}" rows="3" ${field.required ? 'required' : ''}></textarea>`;
+        } else {
+          fieldsHtml += `<input type="text" name="tf_${field.id}" ${field.required ? 'required' : ''}>`;
+        }
+        fieldsHtml += '</div>';
+      }
     }
     fieldsHtml += `</div>`;
   }

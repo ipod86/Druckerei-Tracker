@@ -144,8 +144,17 @@ function setupSchema(db) {
       order_index INTEGER DEFAULT 0
     );
 
+    CREATE TABLE IF NOT EXISTS transitions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      from_group_id INTEGER DEFAULT NULL REFERENCES groups(id),
+      to_group_id INTEGER NOT NULL REFERENCES groups(id),
+      order_index INTEGER DEFAULT 0
+    );
+
     CREATE TABLE IF NOT EXISTS transition_fields (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      transition_id INTEGER REFERENCES transitions(id),
       from_group_id INTEGER DEFAULT NULL REFERENCES groups(id),
       to_group_id INTEGER NOT NULL REFERENCES groups(id),
       field_name TEXT NOT NULL,

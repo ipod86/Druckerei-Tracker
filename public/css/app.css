@@ -1019,6 +1019,45 @@ body {
 .transition-value-label { color: var(--text-muted); font-weight: 500; }
 .transition-value-val { color: var(--text); }
 
+/* transition-subheader in move modal (multiple transitions) */
+.transition-subheader {
+  padding: 6px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--secondary);
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+/* Transition containers in admin */
+.transition-container {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.transition-container-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg);
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.transition-container-route {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--secondary);
+  margin-left: 8px;
+}
+.transition-container-body {
+  padding: 12px 14px;
+}
+
 /* ===== CONFIRM MODAL ===== */
 .confirm-modal-content { max-width: 400px; }
 .confirm-modal-content p { padding: 16px 20px; }

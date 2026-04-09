@@ -23,4 +23,19 @@ db.pragma('foreign_keys = ON');
 setupSchema(db);
 setupDefaultData(db);
 
+// Migrations for existing databases
+try {
+  db.exec(`CREATE TABLE IF NOT EXISTS transitions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    from_group_id INTEGER DEFAULT NULL REFERENCES groups(id),
+    to_group_id INTEGER NOT NULL REFERENCES groups(id),
+    order_index INTEGER DEFAULT 0
+  )`);
+} catch (_) {}
+
+try {
+  db.exec('ALTER TABLE transition_fields ADD COLUMN transition_id INTEGER REFERENCES transitions(id)');
+} catch (_) {} // column already exists
+
 module.exports = db;

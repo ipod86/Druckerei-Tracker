@@ -266,38 +266,107 @@ function showColumnForm(col, groupId, groupName) {
 
 // ===== Transitions =====
 async function loadTransitions(content) {
-  const [groups, transitionsObj] = await Promise.all([
+  const [groups, transitions] = await Promise.all([
     apiFetch('/api/groups'),
     apiFetch('/api/transitions'),
   ]);
 
   content.innerHTML = `
     <div class="admin-section">
-      <div class="admin-section-title">Übergangsfelder</div>
-      <p style="font-size:13px;color:var(--secondary);margin-bottom:16px">Diese Felder werden angezeigt, wenn eine Karte in eine andere Gruppe verschoben wird.</p>
-      <button class="btn btn-primary btn-sm" id="add-transition-btn">+ Neues Feld</button>
+      <div class="admin-section-title">Übergänge</div>
+      <p style="font-size:13px;color:var(--secondary);margin-bottom:16px">
+        Felder, die beim Verschieben einer Karte in eine andere Gruppe ausgefüllt werden müssen.
+        Jeder Übergang hat einen Namen, eine optionale Quellgruppe und eine Zielgruppe.
+      </p>
+      <button class="btn btn-primary btn-sm" id="add-transition-btn">+ Neuen Übergang</button>
       <div id="transitions-list" style="margin-top:16px">
-        ${renderTransitionsList(groups, transitionsObj)}
+        ${renderTransitionsList(transitions)}
       </div>
     </div>
   `;
 
   document.getElementById('add-transition-btn').addEventListener('click', () => showTransitionForm(null, groups));
+  setupTransitionHandlers(transitions, groups);
+}
 
-  content.querySelectorAll('.edit-transition-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const allFields = await apiFetch('/api/transitions');
-      const allFieldsFlat = Object.values(allFields).flat();
-      const field = allFieldsFlat.find(f => f.id === parseInt(btn.dataset.fieldId));
-      if (field) showTransitionForm(field, groups);
+function renderTransitionsList(transitions) {
+  if (!transitions.length) {
+    return '<p style="color:var(--text-muted);font-size:13px">Keine Übergänge definiert.</p>';
+  }
+
+  return transitions.map(t => `
+    <div class="transition-container" data-id="${t.id}">
+      <div class="transition-container-header">
+        <div style="flex:1;min-width:0">
+          <strong>${escapeHtml(t.name)}</strong>
+          <span class="transition-container-route">
+            ${t.from_group_name ? escapeHtml(t.from_group_name) : '(Alle Gruppen)'}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:11px;height:11px;flex-shrink:0"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            ${escapeHtml(t.to_group_name)}
+          </span>
+        </div>
+        <button class="btn btn-sm btn-secondary edit-transition-btn" data-id="${t.id}">Bearbeiten</button>
+        <button class="btn btn-sm btn-danger delete-transition-btn" data-id="${t.id}">Löschen</button>
+      </div>
+      <div class="transition-container-body">
+        ${t.fields.length === 0
+          ? '<p style="font-size:12px;color:var(--text-muted);margin:0">Keine Felder — bitte Felder hinzufügen.</p>'
+          : `<table style="margin-bottom:10px"><thead><tr><th>Feldname</th><th>Typ</th><th>Pflicht</th><th>Aktionen</th></tr></thead><tbody>
+            ${t.fields.map(f => `
+              <tr>
+                <td>${escapeHtml(f.field_name)}</td>
+                <td>${escapeHtml(f.field_type)}</td>
+                <td>${f.required ? '✓' : '—'}</td>
+                <td>
+                  <button class="btn btn-sm btn-secondary edit-field-btn" data-transition-id="${t.id}" data-field-id="${f.id}">Bearbeiten</button>
+                  <button class="btn btn-sm btn-danger delete-field-btn" data-field-id="${f.id}" style="margin-left:4px">Löschen</button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody></table>`
+        }
+        <button class="btn btn-sm btn-secondary add-field-btn" data-transition-id="${t.id}">+ Feld hinzufügen</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function setupTransitionHandlers(transitions, groups) {
+  document.querySelectorAll('.edit-transition-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const t = transitions.find(x => x.id === parseInt(btn.dataset.id));
+      if (t) showTransitionForm(t, groups);
     });
   });
 
-  content.querySelectorAll('.delete-transition-btn').forEach(btn => {
+  document.querySelectorAll('.delete-transition-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!await showConfirm('Übergang löschen', 'Übergang und alle zugehörigen Felder löschen?')) return;
+      try {
+        await apiFetch(`/api/transitions/${btn.dataset.id}`, { method: 'DELETE' });
+        showToast('Übergang gelöscht', 'success');
+        loadAdminSection('transitions');
+      } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
+    });
+  });
+
+  document.querySelectorAll('.add-field-btn').forEach(btn => {
+    btn.addEventListener('click', () => showFieldForm(null, parseInt(btn.dataset.transitionId)));
+  });
+
+  document.querySelectorAll('.edit-field-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const t = transitions.find(x => x.id === parseInt(btn.dataset.transitionId));
+      const field = t?.fields.find(f => f.id === parseInt(btn.dataset.fieldId));
+      if (field) showFieldForm(field, parseInt(btn.dataset.transitionId));
+    });
+  });
+
+  document.querySelectorAll('.delete-field-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
       if (!await showConfirm('Feld löschen', 'Übergangsfeld löschen?')) return;
       try {
-        await apiFetch(`/api/transitions/${btn.dataset.fieldId}`, { method: 'DELETE' });
+        await apiFetch(`/api/transitions/fields/${btn.dataset.fieldId}`, { method: 'DELETE' });
         showToast('Feld gelöscht', 'success');
         loadAdminSection('transitions');
       } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
@@ -305,44 +374,48 @@ async function loadTransitions(content) {
   });
 }
 
-function renderTransitionsList(groups, transitionsObj) {
-  const allFields = Object.values(transitionsObj).flat();
-  if (allFields.length === 0) return '<p style="color:var(--text-muted);font-size:13px">Keine Übergangsfelder definiert</p>';
+function showTransitionForm(transition, groups) {
+  showFormModal('Übergang ' + (transition ? 'bearbeiten' : 'erstellen'), `
+    <div class="form-group">
+      <label class="required">Name des Übergangs</label>
+      <input type="text" id="f-t-name" value="${escapeHtml(transition?.name || '')}" placeholder="z.B. Übergabe an Druck">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Von Gruppe <span style="font-weight:400;color:var(--secondary)">(optional)</span></label>
+        <select id="f-t-fromgroup">
+          <option value="">— Alle Gruppen —</option>
+          ${groups.map(g => `<option value="${g.id}" ${transition?.from_group_id == g.id ? 'selected' : ''}>${escapeHtml(g.name)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="required">Nach Gruppe</label>
+        <select id="f-t-togroup">
+          ${groups.map(g => `<option value="${g.id}" ${transition?.to_group_id == g.id ? 'selected' : ''}>${escapeHtml(g.name)}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+  `, async () => {
+    const data = {
+      name: document.getElementById('f-t-name').value.trim(),
+      from_group_id: document.getElementById('f-t-fromgroup').value || null,
+      to_group_id: parseInt(document.getElementById('f-t-togroup').value),
+    };
+    if (!data.name) { showToast('Name erforderlich', 'error'); return false; }
 
-  // Group by to_group
-  let html = '';
-  for (const group of groups) {
-    const fields = transitionsObj[group.id] || [];
-    if (fields.length === 0) continue;
-    html += `<div style="margin-bottom:16px">
-      <h3 style="font-size:13px;font-weight:700;margin-bottom:8px">Beim Verschieben nach: <span style="color:${escapeHtml(group.color)}">${escapeHtml(group.name)}</span></h3>
-      <table><thead><tr><th>Feldname</th><th>Typ</th><th>Pflicht</th><th>Aktionen</th></tr></thead><tbody>
-      ${fields.map(f => `
-        <tr>
-          <td>${escapeHtml(f.field_name)}</td>
-          <td>${escapeHtml(f.field_type)}</td>
-          <td>${f.required ? '✓' : '—'}</td>
-          <td>
-            <button class="btn btn-sm btn-secondary edit-transition-btn" data-field-id="${f.id}">Bearbeiten</button>
-            <button class="btn btn-sm btn-danger delete-transition-btn" data-field-id="${f.id}" style="margin-left:4px">Löschen</button>
-          </td>
-        </tr>
-      `).join('')}
-      </tbody></table>
-    </div>`;
-  }
-  return html;
+    if (transition) {
+      await apiFetch(`/api/transitions/${transition.id}`, { method: 'PUT', body: JSON.stringify(data) });
+    } else {
+      await apiFetch('/api/transitions', { method: 'POST', body: JSON.stringify(data) });
+    }
+    loadAdminSection('transitions');
+    return true;
+  });
 }
 
-function showTransitionForm(field, groups) {
+function showFieldForm(field, transitionId) {
   const optionsValue = Array.isArray(field?.field_options) ? field.field_options.join('\n') : '';
-  showFormModal('Übergangsfeld ' + (field ? 'bearbeiten' : 'erstellen'), `
-    <div class="form-group">
-      <label class="required">Ziel-Gruppe</label>
-      <select id="f-tf-togroup">
-        ${groups.map(g => `<option value="${g.id}" ${field?.to_group_id == g.id ? 'selected' : ''}>${escapeHtml(g.name)}</option>`).join('')}
-      </select>
-    </div>
+  showFormModal('Feld ' + (field ? 'bearbeiten' : 'hinzufügen'), `
     <div class="form-group">
       <label class="required">Feldname</label>
       <input type="text" id="f-tf-name" value="${escapeHtml(field?.field_name || '')}">
@@ -365,16 +438,15 @@ function showTransitionForm(field, groups) {
         </select>
       </div>
     </div>
-    <div class="form-group" id="f-tf-options-group">
-      <label>Optionen (eine pro Zeile, für Auswahl-Typ)</label>
+    <div class="form-group">
+      <label>Optionen <span style="font-weight:400;color:var(--secondary)">(eine pro Zeile, für Auswahl-Typ)</span></label>
       <textarea id="f-tf-options" placeholder="Option 1&#10;Option 2&#10;Option 3">${escapeHtml(optionsValue)}</textarea>
     </div>
   `, async () => {
     const optionsRaw = document.getElementById('f-tf-options').value;
     const options = optionsRaw.split('\n').map(o => o.trim()).filter(Boolean);
     const data = {
-      to_group_id: parseInt(document.getElementById('f-tf-togroup').value),
-      field_name: document.getElementById('f-tf-name').value,
+      field_name: document.getElementById('f-tf-name').value.trim(),
       field_type: document.getElementById('f-tf-type').value,
       required: parseInt(document.getElementById('f-tf-required').value),
       field_options: options,
@@ -382,9 +454,9 @@ function showTransitionForm(field, groups) {
     if (!data.field_name) { showToast('Feldname erforderlich', 'error'); return false; }
 
     if (field) {
-      await apiFetch(`/api/transitions/${field.id}`, { method: 'PUT', body: JSON.stringify(data) });
+      await apiFetch(`/api/transitions/fields/${field.id}`, { method: 'PUT', body: JSON.stringify(data) });
     } else {
-      await apiFetch('/api/transitions', { method: 'POST', body: JSON.stringify(data) });
+      await apiFetch(`/api/transitions/${transitionId}/fields`, { method: 'POST', body: JSON.stringify(data) });
     }
     loadAdminSection('transitions');
     return true;
