@@ -25,6 +25,31 @@ setupDefaultData(db);
 
 // Migrations for existing databases
 
+// Add companies table if missing
+try {
+  db.exec(`CREATE TABLE IF NOT EXISTS companies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    email TEXT,
+    phone TEXT,
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+} catch (_) {}
+
+// Migrate customers: create company records from existing company text field, add company_id column
+try {
+  db.exec('ALTER TABLE customers ADD COLUMN company_id INTEGER REFERENCES companies(id)');
+  // Migrate existing company text values → companies table
+  const existing = db.prepare("SELECT DISTINCT company FROM customers WHERE company IS NOT NULL AND company != ''").all();
+  const insertCo = db.prepare('INSERT INTO companies (name) VALUES (?)');
+  const updateCust = db.prepare('UPDATE customers SET company_id = ? WHERE company = ?');
+  for (const row of existing) {
+    const result = insertCo.run(row.company);
+    updateCust.run(result.lastInsertRowid, row.company);
+  }
+} catch (_) {}
+
 // Add transition_id column to transition_fields if missing
 try {
   db.exec('ALTER TABLE transition_fields ADD COLUMN transition_id INTEGER REFERENCES transitions(id)');

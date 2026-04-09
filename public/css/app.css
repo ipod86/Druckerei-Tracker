@@ -556,12 +556,7 @@ body {
 
 /* Overdue blink */
 .board-card.overdue {
-  border-left: 3px solid var(--danger);
-  animation: overdue-blink 2s ease-in-out infinite;
-}
-@keyframes overdue-blink {
-  0%, 100% { border-left-color: var(--danger); }
-  50% { border-left-color: transparent; }
+  border: 1.5px solid var(--danger);
 }
 
 .card-labels {
@@ -1055,6 +1050,25 @@ body {
   margin-left: 8px;
 }
 .transition-container-body {
+  padding: 12px 14px;
+}
+
+/* ===== COMPANY BLOCKS (customer page) ===== */
+.company-block {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.company-block-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg);
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.company-block-body {
   padding: 12px 14px;
 }
 

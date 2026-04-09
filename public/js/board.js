@@ -555,7 +555,7 @@ function setupCustomerAutocomplete(customers) {
     if (!exactMatch) {
       const newItem = document.createElement('div');
       newItem.className = 'ac-item ac-item-new';
-      newItem.innerHTML = `<span style="color:var(--primary)">+ Neu: </span>${escapeHtml(q.trim())}`;
+      newItem.innerHTML = `${escapeHtml(q.trim())} <span style="font-size:11px;color:var(--primary)">(neu anlegen)</span>`;
       newItem.addEventListener('mousedown', (e) => {
         e.preventDefault();
         input.value = q.trim();

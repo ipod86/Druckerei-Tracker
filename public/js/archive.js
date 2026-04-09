@@ -117,7 +117,7 @@ function renderArchiveTable(container, cards, total) {
   container.innerHTML = `
     <div class="archive-table">
       <div style="margin-bottom:12px;font-size:13px;color:var(--secondary)">${total} Karte(n) gefunden</div>
-      <table>
+      <div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table>
         <thead>
           <tr>
             <th>Auftragsnr.</th>
@@ -162,7 +162,7 @@ function renderArchiveTable(container, cards, total) {
             </tr>
           `).join('')}
         </tbody>
-      </table>
+      </table></div>
 
       ${totalPages > 1 ? `
       <div class="pagination">
@@ -192,132 +192,288 @@ window.archiveGoPage = function(page) {
   fetchArchive();
 };
 
-// Customers page
+// ===== Customers page =====
+let customerSort = { col: 'name', dir: 'asc' };
+
 window.loadCustomers = async function() {
   const container = document.getElementById('page-customers');
+  const canEdit = currentUser && (currentUser.role === 'admin' || currentUser.role === 'employee');
+
   container.innerHTML = `
     <div class="page-header">
       <h1 class="page-title">Kunden</h1>
-      ${currentUser && currentUser.role !== 'readonly' ? `<button class="btn btn-primary" id="add-customer-btn">+ Neuer Kunde</button>` : ''}
+      ${canEdit ? `
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary" id="add-company-btn">+ Neue Firma</button>
+          <button class="btn btn-primary" id="add-customer-btn">+ Neue Person</button>
+        </div>` : ''}
     </div>
-    <div style="padding:20px">
-      <div class="form-group" style="max-width:300px">
-        <input type="text" id="customer-search" placeholder="Kunde suchen...">
-      </div>
-      <div class="loading"><div class="spinner"></div></div>
+    <div style="padding:16px 20px">
+      <input type="text" id="customer-search" placeholder="Suchen nach Name, Firma, E-Mail…" style="max-width:320px;width:100%">
     </div>
+    <div id="customer-list-area" style="padding:0 20px 20px"></div>
   `;
 
-  // Search
   document.getElementById('customer-search').addEventListener('input', async (e) => {
     const q = e.target.value.trim();
-    try {
-      const customers = await apiFetch(`/api/customers?q=${encodeURIComponent(q)}`);
-      renderCustomerList(customers);
-    } catch (e) {}
+    await refreshCustomerPage(q);
   });
 
-  if (currentUser && currentUser.role !== 'readonly') {
-    document.getElementById('add-customer-btn').addEventListener('click', () => showCustomerForm(null));
+  if (canEdit) {
+    document.getElementById('add-company-btn').addEventListener('click', () => showCompanyForm(null));
+    document.getElementById('add-customer-btn').addEventListener('click', () => showCustomerForm(null, null));
   }
 
-  await refreshCustomerList();
+  await refreshCustomerPage();
 };
 
-async function refreshCustomerList(q = '') {
+async function refreshCustomerPage(q = '') {
   try {
-    const customers = await apiFetch(`/api/customers?q=${encodeURIComponent(q)}`);
-    renderCustomerList(customers);
+    const [companies, customers] = await Promise.all([
+      apiFetch(`/api/companies?q=${encodeURIComponent(q)}`),
+      apiFetch(`/api/customers?q=${encodeURIComponent(q)}`),
+    ]);
+    renderCustomerPage(companies, customers);
   } catch (e) {
     showToast('Fehler beim Laden', 'error');
   }
 }
 
-function renderCustomerList(customers) {
-  const container = document.querySelector('#page-customers > div:last-child');
-  if (!container) return;
+function sortCustomers(customers) {
+  const { col, dir } = customerSort;
+  return [...customers].sort((a, b) => {
+    let av = (a[col] || '').toString().toLowerCase();
+    let bv = (b[col] || '').toString().toLowerCase();
+    if (col === 'card_count') { av = a.card_count || 0; bv = b.card_count || 0; }
+    const cmp = av < bv ? -1 : av > bv ? 1 : 0;
+    return dir === 'asc' ? cmp : -cmp;
+  });
+}
 
+function sortIcon(col) {
+  if (customerSort.col !== col) return '<span style="opacity:.3;font-size:10px"> ↕</span>';
+  return customerSort.dir === 'asc' ? '<span style="font-size:10px"> ↑</span>' : '<span style="font-size:10px"> ↓</span>';
+}
+
+function renderCustomerPage(companies, allCustomers) {
+  const area = document.getElementById('customer-list-area');
+  if (!area) return;
   const canEdit = currentUser && (currentUser.role === 'admin' || currentUser.role === 'employee');
 
-  container.innerHTML = `
-    <div class="form-group" style="max-width:300px">
-      <input type="text" id="customer-search" placeholder="Kunde suchen..." value="">
-    </div>
-    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+  // Group customers by company
+  const byCompany = {};
+  const standalone = [];
+  for (const c of allCustomers) {
+    if (c.company_id) {
+      if (!byCompany[c.company_id]) byCompany[c.company_id] = [];
+      byCompany[c.company_id].push(c);
+    } else {
+      standalone.push(c);
+    }
+  }
+
+  function personTable(persons) {
+    if (!persons.length) return '<p style="font-size:12px;color:var(--text-muted);padding:8px 0;margin:0">Keine Personen</p>';
+    const sorted = sortCustomers(persons);
+    return `
+      <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
       <table>
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Firma</th>
-            <th>E-Mail</th>
-            <th>Telefon</th>
-            <th>Karten</th>
-            <th>Aktionen</th>
-          </tr>
-        </thead>
+        <thead><tr>
+          <th class="sort-th" data-col="name" style="cursor:pointer">Name${sortIcon('name')}</th>
+          <th class="sort-th" data-col="email" style="cursor:pointer">E-Mail${sortIcon('email')}</th>
+          <th class="sort-th" data-col="phone" style="cursor:pointer">Telefon${sortIcon('phone')}</th>
+          <th class="sort-th" data-col="card_count" style="cursor:pointer">Karten${sortIcon('card_count')}</th>
+          <th>Aktionen</th>
+        </tr></thead>
         <tbody>
-          ${customers.map(c => `
+          ${sorted.map(c => `
             <tr>
               <td><strong>${escapeHtml(c.name)}</strong></td>
-              <td>${escapeHtml(c.company || '—')}</td>
               <td>${c.email ? `<a href="mailto:${escapeHtml(c.email)}">${escapeHtml(c.email)}</a>` : '—'}</td>
               <td>${escapeHtml(c.phone || '—')}</td>
               <td>${c.card_count || 0}</td>
               <td style="white-space:nowrap">
                 ${canEdit ? `
-                  <button class="btn btn-sm btn-secondary edit-customer-btn" data-customer-id="${c.id}">Bearbeiten</button>
-                  <button class="btn btn-sm btn-danger delete-customer-btn" data-customer-id="${c.id}" style="margin-left:4px">Löschen</button>
+                  <button class="btn btn-sm btn-secondary edit-customer-btn" data-id="${c.id}">Bearb.</button>
+                  <button class="btn btn-sm btn-danger delete-customer-btn" data-id="${c.id}" style="margin-left:4px">Löschen</button>
                 ` : ''}
               </td>
             </tr>
           `).join('')}
         </tbody>
       </table>
-    </div>
-  `;
+      </div>`;
+  }
 
-  document.getElementById('customer-search').addEventListener('input', async (e) => {
-    const q = e.target.value.trim();
-    const result = await apiFetch(`/api/customers?q=${encodeURIComponent(q)}`);
-    renderCustomerList(result);
-  });
+  let html = '';
 
-  container.querySelectorAll('.edit-customer-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const customer = await apiFetch(`/api/customers/${btn.dataset.customerId}`);
-      showCustomerForm(customer);
+  // Companies with their persons
+  for (const co of companies) {
+    const persons = byCompany[co.id] || [];
+    html += `
+      <div class="company-block">
+        <div class="company-block-header">
+          <div style="flex:1;min-width:0">
+            <strong>${escapeHtml(co.name)}</strong>
+            ${co.email ? `<a href="mailto:${escapeHtml(co.email)}" style="font-size:12px;color:var(--secondary);margin-left:8px">${escapeHtml(co.email)}</a>` : ''}
+            ${co.phone ? `<span style="font-size:12px;color:var(--secondary);margin-left:8px">${escapeHtml(co.phone)}</span>` : ''}
+          </div>
+          ${canEdit ? `
+            <button class="btn btn-sm btn-secondary add-person-btn" data-company-id="${co.id}" data-company-name="${escapeHtml(co.name)}">+ Person</button>
+            <button class="btn btn-sm btn-secondary edit-company-btn" data-id="${co.id}" style="margin-left:4px">Bearb.</button>
+            <button class="btn btn-sm btn-danger delete-company-btn" data-id="${co.id}" style="margin-left:4px">Löschen</button>
+          ` : ''}
+        </div>
+        <div class="company-block-body">${personTable(persons)}</div>
+      </div>`;
+  }
+
+  // Standalone persons (no company)
+  if (standalone.length > 0) {
+    html += `
+      <div class="company-block">
+        <div class="company-block-header">
+          <div style="flex:1"><strong style="color:var(--secondary)">Ohne Firma</strong></div>
+        </div>
+        <div class="company-block-body">${personTable(standalone)}</div>
+      </div>`;
+  }
+
+  if (!html) html = '<div class="empty-state">Keine Kunden gefunden</div>';
+  area.innerHTML = html;
+
+  // Sort handlers
+  area.querySelectorAll('.sort-th').forEach(th => {
+    th.addEventListener('click', async () => {
+      const col = th.dataset.col;
+      if (customerSort.col === col) {
+        customerSort.dir = customerSort.dir === 'asc' ? 'desc' : 'asc';
+      } else {
+        customerSort.col = col;
+        customerSort.dir = 'asc';
+      }
+      const q = document.getElementById('customer-search')?.value || '';
+      await refreshCustomerPage(q);
     });
   });
 
-  container.querySelectorAll('.delete-customer-btn').forEach(btn => {
+  // Company actions
+  area.querySelectorAll('.edit-company-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
-      if (!await showConfirm('Kunden löschen', 'Kunden wirklich löschen? Verknüpfte Karten werden getrennt.')) return;
+      const co = await apiFetch(`/api/companies?q=`);
+      const found = co.find(c => c.id === parseInt(btn.dataset.id));
+      if (found) showCompanyForm(found);
+    });
+  });
+  area.querySelectorAll('.delete-company-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!await showConfirm('Firma löschen', 'Firma löschen? Zugehörige Personen bleiben erhalten.')) return;
       try {
-        await apiFetch(`/api/customers/${btn.dataset.customerId}`, { method: 'DELETE' });
-        showToast('Kunde gelöscht', 'success');
-        refreshCustomerList();
+        await apiFetch(`/api/companies/${btn.dataset.id}`, { method: 'DELETE' });
+        showToast('Firma gelöscht', 'success');
+        refreshCustomerPage(document.getElementById('customer-search')?.value || '');
+      } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
+    });
+  });
+  area.querySelectorAll('.add-person-btn').forEach(btn => {
+    btn.addEventListener('click', () => showCustomerForm(null, parseInt(btn.dataset.companyId)));
+  });
+
+  // Person actions
+  area.querySelectorAll('.edit-customer-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const c = await apiFetch(`/api/customers/${btn.dataset.id}`);
+      showCustomerForm(c, c.company_id);
+    });
+  });
+  area.querySelectorAll('.delete-customer-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!await showConfirm('Person löschen', 'Person löschen? Verknüpfte Karten werden getrennt.')) return;
+      try {
+        await apiFetch(`/api/customers/${btn.dataset.id}`, { method: 'DELETE' });
+        showToast('Person gelöscht', 'success');
+        refreshCustomerPage(document.getElementById('customer-search')?.value || '');
       } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
     });
   });
 }
 
-function showCustomerForm(customer) {
+function showCompanyForm(company) {
   const modal = document.getElementById('create-card-modal');
   const body = document.getElementById('create-card-modal-body');
-  document.querySelector('#create-card-modal .modal-header h2').textContent = customer ? 'Kunden bearbeiten' : 'Neuer Kunde';
+  document.querySelector('#create-card-modal .modal-header h2').textContent = company ? 'Firma bearbeiten' : 'Neue Firma';
+
+  body.innerHTML = `
+    <div class="modal-body">
+      <form id="company-form">
+        <div class="form-group">
+          <label class="required">Firmenname</label>
+          <input type="text" name="name" required value="${escapeHtml(company?.name || '')}">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>E-Mail</label>
+            <input type="email" name="email" value="${escapeHtml(company?.email || '')}">
+          </div>
+          <div class="form-group">
+            <label>Telefon</label>
+            <input type="text" name="phone" value="${escapeHtml(company?.phone || '')}">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Notizen</label>
+          <textarea name="notes">${escapeHtml(company?.notes || '')}</textarea>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="co-cancel-btn">Abbrechen</button>
+      <button class="btn btn-primary" id="co-save-btn">${company ? 'Speichern' : 'Erstellen'}</button>
+    </div>
+  `;
+
+  modal.classList.remove('hidden');
+  const close = () => modal.classList.add('hidden');
+  document.getElementById('create-card-modal-close').onclick = close;
+  document.getElementById('create-card-modal-backdrop').onclick = close;
+  document.getElementById('co-cancel-btn').onclick = close;
+
+  document.getElementById('co-save-btn').addEventListener('click', async () => {
+    const data = Object.fromEntries(new FormData(document.getElementById('company-form')));
+    if (!data.name) { showToast('Name erforderlich', 'error'); return; }
+    try {
+      if (company) {
+        await apiFetch(`/api/companies/${company.id}`, { method: 'PUT', body: JSON.stringify(data) });
+        showToast('Firma gespeichert', 'success');
+      } else {
+        await apiFetch('/api/companies', { method: 'POST', body: JSON.stringify(data) });
+        showToast('Firma erstellt', 'success');
+      }
+      close();
+      refreshCustomerPage(document.getElementById('customer-search')?.value || '');
+    } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
+  });
+}
+
+function showCustomerForm(customer, defaultCompanyId) {
+  const modal = document.getElementById('create-card-modal');
+  const body = document.getElementById('create-card-modal-body');
+  document.querySelector('#create-card-modal .modal-header h2').textContent = customer ? 'Person bearbeiten' : 'Neue Person';
+
+  const companyId = customer?.company_id ?? defaultCompanyId ?? null;
 
   body.innerHTML = `
     <div class="modal-body">
       <form id="customer-form">
-        <div class="form-row">
-          <div class="form-group">
-            <label class="required">Name</label>
-            <input type="text" name="name" required value="${escapeHtml(customer?.name || '')}">
-          </div>
-          <div class="form-group">
-            <label>Firma</label>
-            <input type="text" name="company" value="${escapeHtml(customer?.company || '')}">
-          </div>
+        <div class="form-group">
+          <label class="required">Name</label>
+          <input type="text" name="name" required value="${escapeHtml(customer?.name || '')}">
+        </div>
+        <div class="form-group">
+          <label>Firma</label>
+          <select name="company_id" id="customer-company-select">
+            <option value="">— Keine Firma —</option>
+          </select>
         </div>
         <div class="form-row">
           <div class="form-group">
@@ -333,7 +489,6 @@ function showCustomerForm(customer) {
           <label>Notizen</label>
           <textarea name="notes">${escapeHtml(customer?.notes || '')}</textarea>
         </div>
-        <div id="customer-form-error" class="error-msg hidden"></div>
       </form>
     </div>
     <div class="modal-footer">
@@ -342,35 +497,40 @@ function showCustomerForm(customer) {
     </div>
   `;
 
+  // Populate company dropdown
+  apiFetch('/api/companies').then(companies => {
+    const sel = document.getElementById('customer-company-select');
+    if (!sel) return;
+    for (const co of companies) {
+      const opt = document.createElement('option');
+      opt.value = co.id;
+      opt.textContent = co.name;
+      if (co.id === companyId) opt.selected = true;
+      sel.appendChild(opt);
+    }
+  });
+
   modal.classList.remove('hidden');
-  document.getElementById('create-card-modal-close').onclick = () => modal.classList.add('hidden');
-  document.getElementById('create-card-modal-backdrop').onclick = () => modal.classList.add('hidden');
-  document.getElementById('customer-cancel-btn').onclick = () => modal.classList.add('hidden');
+  const close = () => modal.classList.add('hidden');
+  document.getElementById('create-card-modal-close').onclick = close;
+  document.getElementById('create-card-modal-backdrop').onclick = close;
+  document.getElementById('customer-cancel-btn').onclick = close;
 
   document.getElementById('customer-save-btn').addEventListener('click', async () => {
-    const form = document.getElementById('customer-form');
-    const formData = new FormData(form);
+    const formData = new FormData(document.getElementById('customer-form'));
     const data = Object.fromEntries(formData);
-
-    if (!data.name) {
-      document.getElementById('customer-form-error').textContent = 'Name ist erforderlich';
-      document.getElementById('customer-form-error').classList.remove('hidden');
-      return;
-    }
-
+    data.company_id = data.company_id || null;
+    if (!data.name) { showToast('Name erforderlich', 'error'); return; }
     try {
       if (customer) {
         await apiFetch(`/api/customers/${customer.id}`, { method: 'PUT', body: JSON.stringify(data) });
-        showToast('Kunde gespeichert', 'success');
+        showToast('Person gespeichert', 'success');
       } else {
         await apiFetch('/api/customers', { method: 'POST', body: JSON.stringify(data) });
-        showToast('Kunde erstellt', 'success');
+        showToast('Person erstellt', 'success');
       }
-      modal.classList.add('hidden');
-      refreshCustomerList();
-    } catch (e) {
-      document.getElementById('customer-form-error').textContent = e.message;
-      document.getElementById('customer-form-error').classList.remove('hidden');
-    }
+      close();
+      refreshCustomerPage(document.getElementById('customer-search')?.value || '');
+    } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
   });
 }

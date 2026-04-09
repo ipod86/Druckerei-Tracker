@@ -23,10 +23,7 @@ window.loadAdmin = function() {
 
         <div class="admin-sidebar-section">Verwaltung</div>
         <div class="admin-sidebar-item" data-section="users">Benutzer</div>
-        <div class="admin-sidebar-item" data-section="locations">Standorte</div>
         <div class="admin-sidebar-item" data-section="labels">Labels</div>
-        <div class="admin-sidebar-item" data-section="customers">Kunden</div>
-        <div class="admin-sidebar-item" data-section="checklist-templates">Checklisten-Vorlagen</div>
 
         <div class="admin-sidebar-section">System</div>
         <div class="admin-sidebar-item" data-section="branding">CI / Branding</div>
