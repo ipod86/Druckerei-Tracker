@@ -73,6 +73,7 @@ async function checkEscalations() {
       SELECT ca.*
       FROM cards ca
       WHERE ca.column_id = ? AND ca.archived = 0
+      AND (ca.snoozed_until IS NULL OR ca.snoozed_until < datetime('now'))
       AND (julianday('now') - julianday(
              COALESCE(
                (SELECT MAX(h.created_at) FROM card_history h WHERE h.card_id = ca.id AND h.action_type IN ('moved','created')),

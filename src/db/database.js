@@ -25,6 +25,9 @@ setupDefaultData(db);
 
 // Migrations for existing databases
 
+// Add snoozed_until to cards if missing
+try { db.exec('ALTER TABLE cards ADD COLUMN snoozed_until DATETIME DEFAULT NULL'); } catch (_) {}
+
 // Add companies table if missing
 try {
   db.exec(`CREATE TABLE IF NOT EXISTS companies (

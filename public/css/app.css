@@ -559,6 +559,18 @@ body {
   border: 1.5px solid var(--danger);
 }
 
+.snooze-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--danger);
+  color: white;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  flex-wrap: wrap;
+}
+
 .card-labels {
   display: flex;
   flex-wrap: wrap;

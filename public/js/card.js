@@ -52,6 +52,16 @@ async function renderCardModal(card) {
         <button class="modal-close" id="card-close-btn">&times;</button>
       </div>
     </div>
+    ${isOverdue(card) && canEdit ? `
+    <div class="snooze-banner">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;flex-shrink:0"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+      <span>Erinnerung überfällig</span>
+      <div style="display:flex;align-items:center;gap:6px;margin-left:auto">
+        <span style="font-size:12px">Verschieben auf:</span>
+        <input type="date" id="snooze-date" style="font-size:12px;padding:2px 6px;border:1px solid rgba(255,255,255,.5);border-radius:4px;background:rgba(255,255,255,.15);color:inherit" min="${new Date().toISOString().slice(0,10)}">
+        <button class="btn btn-sm" id="snooze-btn" style="background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:inherit;padding:3px 10px">OK</button>
+      </div>
+    </div>` : ''}
     <div class="card-detail-layout">
       <div class="card-detail-main" id="card-detail-main">
         <!-- Title -->
@@ -285,6 +295,25 @@ async function renderCardModal(card) {
 
     // Labels
     setupLabelHandlers(card.id, card.labels || []);
+
+    // Snooze
+    const snoozeBtn = document.getElementById('snooze-btn');
+    if (snoozeBtn) {
+      snoozeBtn.addEventListener('click', async () => {
+        const dateInput = document.getElementById('snooze-date');
+        const val = dateInput?.value;
+        if (!val) { showToast('Bitte Datum wählen', 'error'); return; }
+        try {
+          await apiFetch(`/api/cards/${card.id}/snooze`, {
+            method: 'POST',
+            body: JSON.stringify({ until: val + 'T23:59:59' }),
+          });
+          showToast('Erinnerung verschoben', 'success');
+          renderCardModal(await apiFetch(`/api/cards/${card.id}`));
+          if (typeof fetchAndRenderBoard === 'function') fetchAndRenderBoard();
+        } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
+      });
+    }
 
     // Archive
     document.getElementById('card-archive-btn').addEventListener('click', () => handleArchive(card));

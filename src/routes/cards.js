@@ -116,12 +116,16 @@ router.get('/board', requireAuth, (req, res) => {
   const { location_id, label_id, user_id } = req.query;
 
   let cardQuery = `
-    SELECT ca.*, col.name as column_name, col.group_id,
+    SELECT ca.*, col.name as column_name, col.group_id, col.time_limit_hours,
            g.name as group_name, g.color as group_color, g.order_index as group_order,
            cu.name as customer_name,
            l.name as location_name,
            (SELECT COUNT(*) FROM checklist_items ci JOIN checklists ch ON ci.checklist_id = ch.id WHERE ch.card_id = ca.id) as checklist_total,
-           (SELECT COUNT(*) FROM checklist_items ci JOIN checklists ch ON ci.checklist_id = ch.id WHERE ch.card_id = ca.id AND ci.completed = 1) as checklist_done
+           (SELECT COUNT(*) FROM checklist_items ci JOIN checklists ch ON ci.checklist_id = ch.id WHERE ch.card_id = ca.id AND ci.completed = 1) as checklist_done,
+           COALESCE(
+             (SELECT MAX(h.created_at) FROM card_history h WHERE h.card_id = ca.id AND h.action_type IN ('moved','created')),
+             ca.created_at
+           ) as last_moved_at
     FROM cards ca
     JOIN columns col ON ca.column_id = col.id
     JOIN groups g ON col.group_id = g.id
@@ -358,7 +362,7 @@ router.post('/:id/move', requireEmployee, (req, res) => {
     newPosition = (maxPos.mx || 0) + 1000;
   }
 
-  db.prepare('UPDATE cards SET column_id = ?, position = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+  db.prepare('UPDATE cards SET column_id = ?, position = ?, updated_at = CURRENT_TIMESTAMP, snoozed_until = NULL WHERE id = ?')
     .run(column_id, newPosition, req.params.id);
 
   // History
@@ -403,6 +407,18 @@ router.post('/:id/restore', requireEmployee, (req, res) => {
   db.prepare('UPDATE cards SET archived = 0, archived_at = NULL WHERE id = ?').run(req.params.id);
   db.prepare('INSERT INTO card_history (card_id, action_type, user_id, details) VALUES (?, ?, ?, ?)')
     .run(req.params.id, 'restored', req.user.id, JSON.stringify({}));
+  res.json({ success: true });
+});
+
+// POST /:id/snooze - snooze overdue reminder until a given datetime
+router.post('/:id/snooze', requireEmployee, (req, res) => {
+  const card = db.prepare('SELECT * FROM cards WHERE id = ?').get(req.params.id);
+  if (!card) return res.status(404).json({ error: 'Card not found' });
+
+  const { until } = req.body;
+  if (!until) return res.status(400).json({ error: 'until required' });
+
+  db.prepare('UPDATE cards SET snoozed_until = ? WHERE id = ?').run(until, req.params.id);
   res.json({ success: true });
 });
 

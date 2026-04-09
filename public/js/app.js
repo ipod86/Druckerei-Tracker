@@ -463,10 +463,18 @@ window.formatDateShort = function(dateStr) {
 };
 
 window.isOverdue = function(card) {
-  if (card.due_date) {
-    const due = new Date(card.due_date);
-    if (due < new Date()) return true;
+  // If snoozed and snooze hasn't expired yet → not overdue
+  if (card.snoozed_until && new Date(card.snoozed_until) > new Date()) return false;
+
+  // Overdue by due_date
+  if (card.due_date && new Date(card.due_date) < new Date()) return true;
+
+  // Overdue by column time limit
+  if (card.time_limit_hours && card.last_moved_at) {
+    const hoursInColumn = (Date.now() - new Date(card.last_moved_at)) / 3600000;
+    if (hoursInColumn > card.time_limit_hours) return true;
   }
+
   return false;
 };
 
