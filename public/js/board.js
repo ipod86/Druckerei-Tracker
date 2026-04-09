@@ -262,7 +262,7 @@ async function executeDrop(cardId, sourceColumnId, targetColEl) {
 
     if (targetGroupId !== sourceGroupId) {
       try {
-        const fields = await apiFetch(`/api/transitions/group/${targetGroupId}?from=${sourceGroupId}`);
+        const fields = await apiFetch(`/api/transitions/group/${sourceGroupId}?to=${targetGroupId}`);
         if (fields && fields.length > 0) {
           showMoveModal(cardId, targetColumnId, targetGroupId, fields);
           return;
@@ -292,12 +292,8 @@ function showMoveModal(cardId, targetColumnId, targetGroupId, fields) {
   const modal = document.getElementById('move-modal');
   const body = document.getElementById('move-modal-body');
 
-  // Find group name from board data
-  let targetGroupName = '';
-  if (boardData) {
-    const grp = boardData.groups.find(g => String(g.id) === String(targetGroupId));
-    if (grp) targetGroupName = grp.name;
-  }
+  // Source group name from the first field's from_group_name
+  const sourceGroupName = fields[0]?.from_group_name || '';
 
   // Group fields by transition
   const byTransition = {};
@@ -314,13 +310,13 @@ function showMoveModal(cardId, targetColumnId, targetGroupId, fields) {
 
   let fieldsHtml = `<div class="modal-body">`;
 
-  if (targetGroupName) {
+  if (sourceGroupName) {
     fieldsHtml += `
       <div class="transition-header">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;flex-shrink:0">
           <path d="M5 12h14M12 5l7 7-7 7"/>
         </svg>
-        <span>Übergabe an <strong>${escapeHtml(targetGroupName)}</strong></span>
+        <span>Übergabe aus <strong>${escapeHtml(sourceGroupName)}</strong></span>
       </div>`;
   }
 

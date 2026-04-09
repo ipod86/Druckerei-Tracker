@@ -10,9 +10,9 @@ router.get('/', requireAuth, (req, res) => {
   const transitions = db.prepare(`
     SELECT t.*, g1.name as from_group_name, g2.name as to_group_name
     FROM transitions t
-    LEFT JOIN groups g1 ON t.from_group_id = g1.id
-    JOIN groups g2 ON t.to_group_id = g2.id
-    ORDER BY t.to_group_id, t.order_index, t.id
+    JOIN groups g1 ON t.from_group_id = g1.id
+    LEFT JOIN groups g2 ON t.to_group_id = g2.id
+    ORDER BY t.from_group_id, t.order_index, t.id
   `).all();
 
   for (const t of transitions) {
@@ -30,24 +30,24 @@ router.get('/', requireAuth, (req, res) => {
   res.json(transitions);
 });
 
-// GET /group/:toGroupId - flat field list for move modal (with transition info)
-router.get('/group/:toGroupId', requireAuth, (req, res) => {
-  const fromGroupId = req.query.from;
+// GET /group/:fromGroupId - flat field list for move modal, triggered by leaving this group
+router.get('/group/:fromGroupId', requireAuth, (req, res) => {
+  const toGroupId = req.query.to;
 
   let query = `
     SELECT tf.*, t.name as transition_name, t.id as transition_id,
            g1.name as from_group_name, g2.name as to_group_name
     FROM transition_fields tf
     JOIN transitions t ON tf.transition_id = t.id
-    LEFT JOIN groups g1 ON t.from_group_id = g1.id
-    JOIN groups g2 ON t.to_group_id = g2.id
-    WHERE t.to_group_id = ?
+    JOIN groups g1 ON t.from_group_id = g1.id
+    LEFT JOIN groups g2 ON t.to_group_id = g2.id
+    WHERE t.from_group_id = ?
   `;
-  const params = [req.params.toGroupId];
+  const params = [req.params.fromGroupId];
 
-  if (fromGroupId) {
-    query += ` AND (t.from_group_id IS NULL OR t.from_group_id = ?)`;
-    params.push(fromGroupId);
+  if (toGroupId) {
+    query += ` AND (t.to_group_id IS NULL OR t.to_group_id = ?)`;
+    params.push(toGroupId);
   }
 
   query += ` ORDER BY t.order_index, t.id, tf.order_index`;
@@ -62,22 +62,22 @@ router.get('/group/:toGroupId', requireAuth, (req, res) => {
   res.json(fields);
 });
 
-// POST / - create named transition
+// POST / - create named transition (from_group_id required, to_group_id optional)
 router.post('/', requireAdmin, (req, res) => {
   const { name, from_group_id, to_group_id } = req.body;
-  if (!name || !to_group_id) return res.status(400).json({ error: 'name and to_group_id required' });
+  if (!name || !from_group_id) return res.status(400).json({ error: 'name and from_group_id required' });
 
-  const maxOrder = db.prepare('SELECT MAX(order_index) as mx FROM transitions WHERE to_group_id = ?').get(to_group_id);
+  const maxOrder = db.prepare('SELECT MAX(order_index) as mx FROM transitions WHERE from_group_id = ?').get(from_group_id);
   const result = db.prepare(`
     INSERT INTO transitions (name, from_group_id, to_group_id, order_index)
     VALUES (?, ?, ?, ?)
-  `).run(name, from_group_id || null, to_group_id, (maxOrder.mx || 0) + 1);
+  `).run(name, from_group_id, to_group_id || null, (maxOrder.mx || 0) + 1);
 
   const transition = db.prepare(`
     SELECT t.*, g1.name as from_group_name, g2.name as to_group_name
     FROM transitions t
-    LEFT JOIN groups g1 ON t.from_group_id = g1.id
-    JOIN groups g2 ON t.to_group_id = g2.id
+    JOIN groups g1 ON t.from_group_id = g1.id
+    LEFT JOIN groups g2 ON t.to_group_id = g2.id
     WHERE t.id = ?
   `).get(result.lastInsertRowid);
   transition.fields = [];
@@ -129,21 +129,21 @@ router.put('/:id', requireAdmin, (req, res) => {
   db.prepare(`
     UPDATE transitions SET
       name = COALESCE(?, name),
-      from_group_id = ?,
-      to_group_id = COALESCE(?, to_group_id)
+      from_group_id = COALESCE(?, from_group_id),
+      to_group_id = ?
     WHERE id = ?
   `).run(
     name || null,
-    from_group_id !== undefined ? (from_group_id || null) : t.from_group_id,
-    to_group_id || null,
+    from_group_id || null,
+    to_group_id !== undefined ? (to_group_id || null) : t.to_group_id,
     req.params.id
   );
 
   const updated = db.prepare(`
     SELECT t.*, g1.name as from_group_name, g2.name as to_group_name
     FROM transitions t
-    LEFT JOIN groups g1 ON t.from_group_id = g1.id
-    JOIN groups g2 ON t.to_group_id = g2.id
+    JOIN groups g1 ON t.from_group_id = g1.id
+    LEFT JOIN groups g2 ON t.to_group_id = g2.id
     WHERE t.id = ?
   `).get(req.params.id);
   res.json(updated);

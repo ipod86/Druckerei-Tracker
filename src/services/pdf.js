@@ -132,24 +132,24 @@ async function generateSummaryPDF(cardId) {
       doc.fontSize(11).font('Helvetica').text(card.description, { align: 'justify' });
     }
 
-    // Transition values — grouped by target group
+    // Transition values — grouped by source group (the group the card left)
     if (transitionValues.length > 0) {
       sectionHeading('Übergabewerte');
 
-      // Group by to_group_name
+      // Group by from_group_name
       const tvGroups = {};
       for (const tv of transitionValues) {
-        const key = tv.to_group_name || '?';
+        const key = tv.from_group_name || '?';
         if (!tvGroups[key]) tvGroups[key] = [];
         tvGroups[key].push(tv);
       }
 
       for (const [groupName, entries] of Object.entries(tvGroups)) {
         doc.moveDown(0.5);
-        // Group header with arrow
+        // Group header
         doc.fontSize(11).font('Helvetica-Bold')
            .fillColor('#555555')
-           .text(`→ ${groupName}`, { underline: false });
+           .text(`Übergabe aus ${groupName}`, { underline: false });
         doc.fillColor('#000000');
 
         // Draw a thin separator line

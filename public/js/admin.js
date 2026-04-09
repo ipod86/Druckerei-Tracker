@@ -300,9 +300,8 @@ function renderTransitionsList(transitions) {
         <div style="flex:1;min-width:0">
           <strong>${escapeHtml(t.name)}</strong>
           <span class="transition-container-route">
-            ${t.from_group_name ? escapeHtml(t.from_group_name) : '(Alle Gruppen)'}
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:11px;height:11px;flex-shrink:0"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-            ${escapeHtml(t.to_group_name)}
+            Verlassen von ${escapeHtml(t.from_group_name)}
+            ${t.to_group_name ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:11px;height:11px;flex-shrink:0"><path d="M5 12h14M12 5l7 7-7 7"/></svg> nur nach ${escapeHtml(t.to_group_name)}` : ''}
           </span>
         </div>
         <button class="btn btn-sm btn-secondary edit-transition-btn" data-id="${t.id}">Bearbeiten</button>
@@ -378,19 +377,20 @@ function showTransitionForm(transition, groups) {
   showFormModal('Übergang ' + (transition ? 'bearbeiten' : 'erstellen'), `
     <div class="form-group">
       <label class="required">Name des Übergangs</label>
-      <input type="text" id="f-t-name" value="${escapeHtml(transition?.name || '')}" placeholder="z.B. Übergabe an Druck">
+      <input type="text" id="f-t-name" value="${escapeHtml(transition?.name || '')}" placeholder="z.B. Druckvorgabe">
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label>Von Gruppe <span style="font-weight:400;color:var(--secondary)">(optional)</span></label>
+        <label class="required">Beim Verlassen von</label>
         <select id="f-t-fromgroup">
-          <option value="">— Alle Gruppen —</option>
+          <option value="">— Gruppe wählen —</option>
           ${groups.map(g => `<option value="${g.id}" ${transition?.from_group_id == g.id ? 'selected' : ''}>${escapeHtml(g.name)}</option>`).join('')}
         </select>
       </div>
       <div class="form-group">
-        <label class="required">Nach Gruppe</label>
+        <label>Nur wenn Ziel <span style="font-weight:400;color:var(--secondary)">(optional)</span></label>
         <select id="f-t-togroup">
+          <option value="">— Alle Ziele —</option>
           ${groups.map(g => `<option value="${g.id}" ${transition?.to_group_id == g.id ? 'selected' : ''}>${escapeHtml(g.name)}</option>`).join('')}
         </select>
       </div>
@@ -399,9 +399,10 @@ function showTransitionForm(transition, groups) {
     const data = {
       name: document.getElementById('f-t-name').value.trim(),
       from_group_id: document.getElementById('f-t-fromgroup').value || null,
-      to_group_id: parseInt(document.getElementById('f-t-togroup').value),
+      to_group_id: document.getElementById('f-t-togroup').value || null,
     };
     if (!data.name) { showToast('Name erforderlich', 'error'); return false; }
+    if (!data.from_group_id) { showToast('Quellgruppe erforderlich', 'error'); return false; }
 
     if (transition) {
       await apiFetch(`/api/transitions/${transition.id}`, { method: 'PUT', body: JSON.stringify(data) });

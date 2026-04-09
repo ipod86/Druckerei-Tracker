@@ -147,10 +147,10 @@ async function renderCardModal(card) {
         <div class="card-section">
           <div class="card-section-title">Übergabewerte</div>
           ${(() => {
-            // Group by to_group_name
+            // Group by from_group_name (the group the card left)
             const groups = {};
             for (const tv of card.transition_values) {
-              const key = tv.to_group_name || '?';
+              const key = tv.from_group_name || '?';
               if (!groups[key]) groups[key] = [];
               groups[key].push(tv);
             }
@@ -158,7 +158,7 @@ async function renderCardModal(card) {
               <div class="transition-value-group">
                 <div class="transition-value-group-title">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-                  ${escapeHtml(grpName)}
+                  Übergabe aus ${escapeHtml(grpName)}
                 </div>
                 <div class="transition-value-rows">
                   ${values.map(tv => `
