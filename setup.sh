@@ -48,11 +48,41 @@ done
 read -rp "Autostart beim Systemstart einrichten? [Y/n]: " AUTOSTART
 AUTOSTART="${AUTOSTART:-Y}"
 
-# ── npm install ─────────────────────────────────────────────────────────────
+# ── Build-Abhängigkeiten (für better-sqlite3 Kompilierung) ──────────────────
 echo ""
-echo "▸ Abhängigkeiten installieren..."
+echo "▸ Build-Abhängigkeiten prüfen..."
+MISSING_PKGS=""
+command -v make &>/dev/null   || MISSING_PKGS="$MISSING_PKGS make"
+command -v g++  &>/dev/null   || MISSING_PKGS="$MISSING_PKGS g++"
+command -v python3 &>/dev/null || MISSING_PKGS="$MISSING_PKGS python3"
+if [ -n "$MISSING_PKGS" ]; then
+  echo "  → Installiere:$MISSING_PKGS"
+  sudo apt-get install -y $MISSING_PKGS -qq
+fi
+
+# Python 3.13 hat distutils entfernt — Shim erstellen falls nötig
+python3 -c "import distutils" 2>/dev/null || {
+  echo "  → Python distutils-Shim für Python 3.13 einrichten..."
+  # Erst setuptools aktualisieren
+  pip3 install --quiet --upgrade setuptools 2>/dev/null || true
+  # Shim-Verzeichnis anlegen
+  SITE=$(python3 -c "import site; print(site.getsitepackages()[0])" 2>/dev/null || echo "/usr/local/lib/python3.13/dist-packages")
+  mkdir -p "$SITE/distutils"
+  cat > "$SITE/distutils/__init__.py" << 'PYEOF'
+# Shim: leitet distutils auf setuptools._distutils um (Python 3.13+)
+import setuptools._distutils as _du
+import sys
+sys.modules[__name__].__dict__.update({
+    k: v for k, v in vars(_du).items() if not k.startswith('__')
+})
+PYEOF
+  python3 -c "import distutils; print('  ✓ distutils-Shim OK')" 2>/dev/null || echo "  ⚠ distutils-Shim fehlgeschlagen – trotzdem weiter"
+}
+
+# ── npm install ─────────────────────────────────────────────────────────────
+echo "▸ Abhängigkeiten installieren (kann 1–2 Min dauern)..."
 cd "$APP_DIR"
-npm install --omit=dev --silent
+npm install --omit=dev 2>&1 | grep -E "^(npm warn|npm error|added)" || true
 echo "✓ Abhängigkeiten installiert"
 
 # ── Verzeichnisse anlegen ───────────────────────────────────────────────────
