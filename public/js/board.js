@@ -262,7 +262,7 @@ async function executeDrop(cardId, sourceColumnId, targetColEl) {
 
     if (targetGroupId !== sourceGroupId) {
       try {
-        const fields = await apiFetch(`/api/transitions/group/${sourceGroupId}?to=${targetGroupId}`);
+        const fields = await apiFetch(`/api/transitions/group/${sourceGroupId}`);
         if (fields && fields.length > 0) {
           showMoveModal(cardId, targetColumnId, targetGroupId, fields);
           return;
