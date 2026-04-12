@@ -31,9 +31,16 @@ if systemctl list-units --all --quiet "$APP_NAME.service" 2>/dev/null | grep -q 
   echo "↺ Laufende Instanz wird gestoppt..."
   sudo systemctl stop "$APP_NAME" 2>/dev/null || true
 fi
-# Verbliebene Node-Prozesse des App-Servers beenden
-pkill -f "node.*${APP_DIR}/src/server.js" 2>/dev/null || true
-sleep 1
+# Verbliebene Prozesse auf dem App-Port beenden
+_PREV_PORT=$(grep '^PORT=' "$APP_DIR/.env" 2>/dev/null | cut -d= -f2)
+if [ -n "$_PREV_PORT" ]; then
+  _PIDS=$(ss -tlnp "sport = :${_PREV_PORT}" 2>/dev/null | grep -oP 'pid=\K[0-9]+' | sort -u)
+  if [ -n "$_PIDS" ]; then
+    echo "↺ Prozess(e) auf Port $_PREV_PORT beenden: $_PIDS"
+    echo "$_PIDS" | xargs kill -9 2>/dev/null || true
+    sleep 1
+  fi
+fi
 
 # ── Dedizierter System-User ─────────────────────────────────────────────────
 APP_USER="druckerei"
