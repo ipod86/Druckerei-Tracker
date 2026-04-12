@@ -28,10 +28,13 @@ if [ "$NODE_VER" -lt 18 ]; then
 fi
 echo "✓ Node.js $(node --version)"
 
-# ── unzip prüfen / installieren ──────────────────────────────────────────────
-if ! command -v unzip &>/dev/null; then
-  echo "▸ unzip wird installiert..."
-  sudo apt-get install -y unzip -qq
+# ── unzip + rsync prüfen / installieren ─────────────────────────────────────
+MISSING=""
+command -v unzip &>/dev/null || MISSING="$MISSING unzip"
+command -v rsync &>/dev/null || MISSING="$MISSING rsync"
+if [ -n "$MISSING" ]; then
+  echo "▸ Installiere:$MISSING"
+  sudo apt-get install -y $MISSING -qq
 fi
 
 # ── ZIP herunterladen ────────────────────────────────────────────────────────
@@ -43,13 +46,21 @@ echo "▸ Entpacken..."
 mkdir -p "$TMP_DIR"
 unzip -q "$TMP_ZIP" -d "$TMP_DIR"
 
-# ── In Zielverzeichnis verschieben ───────────────────────────────────────────
-if [ -d "$TARGET" ]; then
-  echo "↺ Vorhandene Installation gefunden – Dateien werden aktualisiert..."
-  cp -r "$TMP_DIR"/Druckerei-Tracker-main/. "$TARGET/"
+# ── In Zielverzeichnis kopieren (Nutzerdaten bleiben erhalten) ───────────────
+mkdir -p "$TARGET"
+if [ -d "$TARGET/data" ] || [ -f "$TARGET/.env" ]; then
+  echo "↺ Vorhandene Installation gefunden – Dateien werden aktualisiert (Daten bleiben erhalten)..."
 else
-  mv "$TMP_DIR/Druckerei-Tracker-main" "$TARGET"
+  echo "▸ Neue Installation..."
 fi
+rsync -a \
+  --exclude=data/ \
+  --exclude=uploads/ \
+  --exclude=backups/ \
+  --exclude=.env \
+  --exclude=update.log \
+  --exclude=node_modules/ \
+  "$TMP_DIR/Druckerei-Tracker-main/" "$TARGET/"
 
 # ── Temporäre Dateien löschen ────────────────────────────────────────────────
 rm -rf "$TMP_ZIP" "$TMP_DIR"
