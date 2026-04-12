@@ -175,7 +175,7 @@ EnvironmentFile=${APP_DIR}/.env
 StandardOutput=journal
 StandardError=journal
 ProtectSystem=strict
-ReadWritePaths=${APP_DIR}
+ReadWritePaths=${APP_DIR} /tmp
 
 [Install]
 WantedBy=multi-user.target
