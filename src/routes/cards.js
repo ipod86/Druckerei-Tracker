@@ -175,7 +175,11 @@ router.get('/:id', requireAuth, (req, res) => {
            g.name as group_name, g.color as group_color, g.order_index as group_order,
            cu.name as customer_name, cu.company as customer_company, cu.email as customer_email_addr,
            l.name as location_name,
-           u.username as created_by_name
+           u.username as created_by_name,
+           COALESCE(
+             (SELECT MAX(h.created_at) FROM card_history h WHERE h.card_id = ca.id AND h.action_type IN ('moved','created')),
+             ca.created_at
+           ) as last_moved_at
     FROM cards ca
     JOIN columns col ON ca.column_id = col.id
     JOIN groups g ON col.group_id = g.id
