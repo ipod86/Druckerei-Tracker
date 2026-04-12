@@ -42,8 +42,12 @@ else
   echo "✓ User '$APP_USER' bereits vorhanden"
 fi
 
-# ── Port abfragen ───────────────────────────────────────────────────────────
-if [ -t 0 ]; then
+# ── Port abfragen (nur bei Erstinstallation) ─────────────────────────────────
+if [ -f "$APP_DIR/.env" ]; then
+  PORT=$(grep '^PORT=' "$APP_DIR/.env" | cut -d= -f2)
+  PORT="${PORT:-3000}"
+  echo "✓ Port $PORT (aus vorhandener .env übernommen)"
+elif [ -t 0 ]; then
   while true; do
     read -rp "Port [3000]: " PORT
     PORT="${PORT:-3000}"
@@ -56,11 +60,13 @@ if [ -t 0 ]; then
   done
 else
   PORT="3000"
-  echo "✓ Port $PORT (Standard, kein Terminal)"
+  echo "✓ Port $PORT (Standard)"
 fi
 
-# ── Autostart abfragen ──────────────────────────────────────────────────────
-if [ -t 0 ]; then
+# ── Autostart abfragen (nur bei Erstinstallation) ────────────────────────────
+if [ -f "$APP_DIR/.env" ]; then
+  AUTOSTART="Y"
+elif [ -t 0 ]; then
   read -rp "Autostart beim Systemstart einrichten? [Y/n]: " AUTOSTART
 fi
 AUTOSTART="${AUTOSTART:-Y}"
@@ -123,14 +129,7 @@ SESSION_TIMEOUT_MINUTES=60
 EOF
   echo "✓ .env erstellt (Session-Secret automatisch generiert)"
 else
-  # Port nur aktualisieren wenn interaktiv eingegeben (nicht Default ohne Terminal)
-  if [ -t 0 ]; then
-    sed -i "s/^PORT=.*/PORT=${PORT}/" "$APP_DIR/.env"
-    echo "✓ .env vorhanden (Port aktualisiert)"
-  else
-    PORT=$(grep '^PORT=' "$APP_DIR/.env" | cut -d= -f2 || echo "3000")
-    echo "✓ .env vorhanden (Port beibehalten: $PORT)"
-  fi
+  echo "✓ .env vorhanden"
 fi
 sudo chown root:"$APP_USER" "$APP_DIR/.env" 2>/dev/null || true
 sudo chmod 640 "$APP_DIR/.env" 2>/dev/null || true
