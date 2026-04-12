@@ -361,6 +361,7 @@ async function renderCardModal(card) {
         const updated = await apiFetch(`/api/cards/${card.id}`);
         document.getElementById('checklists-container').innerHTML = renderChecklists(updated.checklists || [], canEdit, card.id);
         setupChecklistHandlers(card.id, canEdit);
+        if (typeof refreshBoard === 'function') refreshBoard();
       } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
     });
 
@@ -462,6 +463,7 @@ function setupChecklistHandlers(cardId, canEdit) {
       try {
         await apiFetch(`/api/cards/${cardId}/checklists/${checklistId}/items/${itemId}`, { method: 'DELETE' });
         btn.closest('.checklist-item').remove();
+        if (typeof refreshBoard === 'function') refreshBoard();
       } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
     });
   });
@@ -474,6 +476,7 @@ function setupChecklistHandlers(cardId, canEdit) {
       try {
         await apiFetch(`/api/cards/${cardId}/checklists/${checklistId}`, { method: 'DELETE' });
         btn.closest('.checklist').remove();
+        if (typeof refreshBoard === 'function') refreshBoard();
       } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
     });
   });
@@ -501,6 +504,7 @@ function setupChecklistHandlers(cardId, canEdit) {
         `;
         itemsContainer.appendChild(div);
         input.value = '';
+        if (typeof refreshBoard === 'function') refreshBoard();
 
         // Add event listeners to new elements
         div.querySelector('input[type="checkbox"]').addEventListener('change', async (e) => {
@@ -510,12 +514,14 @@ function setupChecklistHandlers(cardId, canEdit) {
               body: JSON.stringify({ completed: e.target.checked }),
             });
             div.classList.toggle('completed', e.target.checked);
+            if (typeof refreshBoard === 'function') refreshBoard();
           } catch (err) {}
         });
         div.querySelector('.delete-item-btn').addEventListener('click', async () => {
           try {
             await apiFetch(`/api/cards/${cardId}/checklists/${checklistId}/items/${item.id}`, { method: 'DELETE' });
             div.remove();
+            if (typeof refreshBoard === 'function') refreshBoard();
           } catch (err) {}
         });
       } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
