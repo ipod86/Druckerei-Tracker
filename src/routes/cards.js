@@ -116,7 +116,7 @@ router.get('/board', requireAuth, (req, res) => {
   const { location_id, label_id, user_id } = req.query;
 
   let cardQuery = `
-    SELECT ca.*, col.name as column_name, col.group_id, col.time_limit_hours,
+    SELECT ca.*, col.name as column_name, col.group_id, col.time_limit_hours, col.time_limit_days, col.escalation_time,
            g.name as group_name, g.color as group_color, g.order_index as group_order,
            cu.name as customer_name,
            l.name as location_name,
@@ -171,7 +171,7 @@ router.get('/board', requireAuth, (req, res) => {
 // GET /:id - full card detail
 router.get('/:id', requireAuth, (req, res) => {
   const card = db.prepare(`
-    SELECT ca.*, col.name as column_name, col.group_id, col.time_limit_hours,
+    SELECT ca.*, col.name as column_name, col.group_id, col.time_limit_hours, col.time_limit_days, col.escalation_time,
            g.name as group_name, g.color as group_color, g.order_index as group_order,
            cu.name as customer_name, cu.company as customer_company, cu.email as customer_email_addr,
            l.name as location_name,
@@ -410,15 +410,13 @@ router.post('/:id/restore', requireEmployee, (req, res) => {
   res.json({ success: true });
 });
 
-// POST /:id/snooze - snooze overdue reminder until a given datetime
+// POST /:id/snooze - snooze or cancel snooze for a card
 router.post('/:id/snooze', requireEmployee, (req, res) => {
   const card = db.prepare('SELECT * FROM cards WHERE id = ?').get(req.params.id);
   if (!card) return res.status(404).json({ error: 'Card not found' });
 
   const { until } = req.body;
-  if (!until) return res.status(400).json({ error: 'until required' });
-
-  db.prepare('UPDATE cards SET snoozed_until = ? WHERE id = ?').run(until, req.params.id);
+  db.prepare('UPDATE cards SET snoozed_until = ? WHERE id = ?').run(until || null, req.params.id);
   res.json({ success: true });
 });
 

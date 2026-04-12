@@ -61,7 +61,7 @@ async function checkEscalations() {
     SELECT col.*, g.name as group_name
     FROM columns col
     JOIN groups g ON col.group_id = g.id
-    WHERE col.time_limit_hours IS NOT NULL AND col.escalation_emails IS NOT NULL
+    WHERE (col.time_limit_hours IS NOT NULL OR col.time_limit_days IS NOT NULL) AND col.escalation_emails IS NOT NULL
   `).all();
 
   for (const col of columnsWithLimit) {
@@ -69,18 +69,48 @@ async function checkEscalations() {
     try { emails = JSON.parse(col.escalation_emails); } catch (e) {}
     if (emails.length === 0) continue;
 
-    const cards = db.prepare(`
-      SELECT ca.*
-      FROM cards ca
-      WHERE ca.column_id = ? AND ca.archived = 0
-      AND (ca.snoozed_until IS NULL OR ca.snoozed_until < datetime('now'))
-      AND (julianday('now') - julianday(
-             COALESCE(
-               (SELECT MAX(h.created_at) FROM card_history h WHERE h.card_id = ca.id AND h.action_type IN ('moved','created')),
-               ca.created_at
-             )
-           )) * 24 > ?
-    `).all(col.id, col.time_limit_hours);
+    // Determine cards that exceeded their time limit
+    let overdueCards = [];
+    if (col.time_limit_days) {
+      // Days-based: card is overdue if date(last_moved) + time_limit_days at escalation_time < now
+      const allCards = db.prepare(`
+        SELECT ca.*,
+               COALESCE(
+                 (SELECT MAX(h.created_at) FROM card_history h WHERE h.card_id = ca.id AND h.action_type IN ('moved','created')),
+                 ca.created_at
+               ) as last_moved_at
+        FROM cards ca
+        WHERE ca.column_id = ? AND ca.archived = 0
+        AND (ca.snoozed_until IS NULL OR ca.snoozed_until < datetime('now'))
+      `).all(col.id);
+
+      const escTime = col.escalation_time || '12:00';
+      const [escH, escM] = escTime.split(':').map(Number);
+      const now = new Date();
+
+      for (const card of allCards) {
+        const movedAt = new Date(card.last_moved_at.replace(' ', 'T') + 'Z');
+        const deadline = new Date(movedAt);
+        deadline.setUTCDate(deadline.getUTCDate() + col.time_limit_days);
+        deadline.setUTCHours(escH, escM, 0, 0);
+        if (now > deadline) overdueCards.push(card);
+      }
+    } else {
+      overdueCards = db.prepare(`
+        SELECT ca.*
+        FROM cards ca
+        WHERE ca.column_id = ? AND ca.archived = 0
+        AND (ca.snoozed_until IS NULL OR ca.snoozed_until < datetime('now'))
+        AND (julianday('now') - julianday(
+               COALESCE(
+                 (SELECT MAX(h.created_at) FROM card_history h WHERE h.card_id = ca.id AND h.action_type IN ('moved','created')),
+                 ca.created_at
+               )
+             )) * 24 > ?
+      `).all(col.id, col.time_limit_hours);
+    }
+
+    const cards = overdueCards;
 
     for (const card of cards) {
       const intervalHours = col.reminder_interval_hours || 24;

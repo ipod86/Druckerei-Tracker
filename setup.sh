@@ -159,7 +159,7 @@ printf  "  ║     http://$(hostname -I | awk '{print $1}'):%-5s                
 echo "  ║                                          ║"
 echo "  ║  Standard-Login:                         ║"
 echo "  ║    Benutzer: admin                       ║"
-echo "  ║    Passwort: admin123                    ║"
+echo "  ║    Passwort: admin                       ║"
 echo "  ║  (bitte sofort ändern!)                  ║"
 echo "  ╚══════════════════════════════════════════╝"
 echo ""

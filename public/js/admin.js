@@ -113,7 +113,7 @@ function renderGroupList(groups) {
         ${(g.columns || []).map(col => `
           <div class="column-item">
             <span class="column-item-name">${escapeHtml(col.name)}</span>
-            ${col.time_limit_hours ? `<span class="tag" style="background:#fef9c3;color:#854d0e">${col.time_limit_hours}h Limit</span>` : ''}
+            ${col.time_limit_days ? `<span class="tag" style="background:#fef9c3;color:#854d0e">${col.time_limit_days}T ${col.escalation_time || '12:00'} Limit</span>` : (col.time_limit_hours ? `<span class="tag" style="background:#fef9c3;color:#854d0e">${col.time_limit_hours}h Limit</span>` : '')}
             <div style="display:flex;gap:4px;margin-left:auto">
               <button class="btn btn-sm btn-secondary edit-column-btn" data-column-id="${col.id}">Bearbeiten</button>
               <button class="btn btn-sm btn-danger delete-column-btn" data-column-id="${col.id}">Löschen</button>
@@ -227,9 +227,15 @@ function showColumnForm(col, groupId, groupName) {
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label>Zeitlimit (Stunden)</label>
-        <input type="number" id="f-col-limit" value="${col?.time_limit_hours || ''}" placeholder="Kein Limit" step="0.5">
+        <label>Zeitlimit (Tage)</label>
+        <input type="number" id="f-col-limit-days" value="${col?.time_limit_days || ''}" placeholder="Kein Limit" min="1" step="1">
       </div>
+      <div class="form-group">
+        <label>Uhrzeit der Erinnerung</label>
+        <input type="time" id="f-col-esc-time" value="${col?.escalation_time || '12:00'}">
+      </div>
+    </div>
+    <div class="form-row">
       <div class="form-group">
         <label>Erinnerungsintervall (Std.)</label>
         <input type="number" id="f-col-reminder" value="${col?.reminder_interval_hours || 24}">
@@ -242,10 +248,13 @@ function showColumnForm(col, groupId, groupName) {
   `, async () => {
     const emailsRaw = document.getElementById('f-col-emails').value;
     const emails = emailsRaw ? emailsRaw.split(',').map(e => e.trim()).filter(Boolean) : [];
+    const daysVal = document.getElementById('f-col-limit-days').value;
     const data = {
       name: document.getElementById('f-col-name').value,
       group_id: parseInt(groupId),
-      time_limit_hours: document.getElementById('f-col-limit').value ? parseFloat(document.getElementById('f-col-limit').value) : null,
+      time_limit_days: daysVal ? parseInt(daysVal) : null,
+      escalation_time: document.getElementById('f-col-esc-time').value || '12:00',
+      time_limit_hours: null,
       reminder_interval_hours: parseFloat(document.getElementById('f-col-reminder').value) || 24,
       escalation_emails: emails,
     };
@@ -272,8 +281,8 @@ async function loadTransitions(content) {
     <div class="admin-section">
       <div class="admin-section-title">Übergänge</div>
       <p style="font-size:13px;color:var(--secondary);margin-bottom:16px">
-        Felder, die beim Verschieben einer Karte in eine andere Gruppe ausgefüllt werden müssen.
-        Jeder Übergang hat einen Namen, eine optionale Quellgruppe und eine Zielgruppe.
+        Felder, die beim Verlassen einer Gruppe ausgefüllt werden müssen.
+        Jeder Übergang hat einen Namen und eine optionale Quellgruppe (die verlassene Gruppe).
       </p>
       <button class="btn btn-primary btn-sm" id="add-transition-btn">+ Neuen Übergang</button>
       <div id="transitions-list" style="margin-top:16px">
@@ -541,7 +550,17 @@ async function loadEmailTemplates(content) {
           `).join('')}
         </tbody>
       </table>
-      <p style="margin-top:12px;font-size:12px;color:var(--text-muted)">Verfügbare Platzhalter: {{card_title}}, {{order_number}}, {{column_name}}, {{customer_name}}, {{customer_email}}, {{due_date}}, {{app_name}}</p>
+      <div style="margin-top:12px;padding:10px;background:var(--bg);border-radius:var(--radius);font-size:12px;color:var(--text-muted)">
+        <strong style="color:var(--text)">Verfügbare Platzhalter:</strong><br>
+        <code>{{card_title}}</code> – Kartenname &nbsp;|&nbsp;
+        <code>{{order_number}}</code> – Auftragsnummer &nbsp;|&nbsp;
+        <code>{{column_name}}</code> – Spaltenname &nbsp;|&nbsp;
+        <code>{{group_name}}</code> – Gruppenname &nbsp;|&nbsp;
+        <code>{{customer_name}}</code> – Kundenname &nbsp;|&nbsp;
+        <code>{{customer_email}}</code> – Kunden-E-Mail &nbsp;|&nbsp;
+        <code>{{due_date}}</code> – Fälligkeitsdatum &nbsp;|&nbsp;
+        <code>{{app_name}}</code> – Name der Anwendung
+      </div>
     </div>
   `;
 

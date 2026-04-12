@@ -1,7 +1,7 @@
 'use strict';
 
 let boardData = null;
-let boardFilters = { location_id: '', label_id: '', user_id: '' };
+let boardFilters = { label_id: '', user_id: '' };
 let dragState = null;
 
 window.loadBoard = async function() {
@@ -9,9 +9,6 @@ window.loadBoard = async function() {
   container.innerHTML = `
     <div class="board-filter-bar">
       <strong style="font-size:13px;margin-right:4px">Board</strong>
-      <select id="board-filter-location">
-        <option value="">Alle Standorte</option>
-      </select>
       <select id="board-filter-label">
         <option value="">Alle Labels</option>
       </select>
@@ -27,17 +24,10 @@ window.loadBoard = async function() {
 
   // Load filter options
   try {
-    const [locations, labels, users] = await Promise.all([
-      apiFetch('/api/locations'),
+    const [labels, users] = await Promise.all([
       apiFetch('/api/labels'),
       currentUser.role === 'admin' ? apiFetch('/api/users') : Promise.resolve([]),
     ]);
-
-    const locSel = document.getElementById('board-filter-location');
-    locations.filter(l => l.active).forEach(l => {
-      locSel.innerHTML += `<option value="${l.id}">${escapeHtml(l.name)}</option>`;
-    });
-    locSel.value = boardFilters.location_id;
 
     const lblSel = document.getElementById('board-filter-label');
     labels.forEach(l => {
@@ -53,7 +43,6 @@ window.loadBoard = async function() {
       userSel.value = boardFilters.user_id;
     }
 
-    locSel.addEventListener('change', () => { boardFilters.location_id = locSel.value; renderBoard(); });
     lblSel.addEventListener('change', () => { boardFilters.label_id = lblSel.value; renderBoard(); });
     const userSel = document.getElementById('board-filter-user');
     if (userSel) userSel.addEventListener('change', () => { boardFilters.user_id = userSel.value; renderBoard(); });
@@ -65,7 +54,6 @@ window.loadBoard = async function() {
 async function fetchAndRenderBoard() {
   try {
     const params = new URLSearchParams();
-    if (boardFilters.location_id) params.set('location_id', boardFilters.location_id);
     if (boardFilters.label_id) params.set('label_id', boardFilters.label_id);
     if (boardFilters.user_id) params.set('user_id', boardFilters.user_id);
 
@@ -95,7 +83,6 @@ function renderBoard() {
 
     for (const col of groupCols) {
       const cards = (cardsByColumn[col.id] || []).filter(card => {
-        if (boardFilters.location_id && String(card.location_id) !== boardFilters.location_id) return false;
         if (boardFilters.label_id && !card.labels.find(l => String(l.id) === boardFilters.label_id)) return false;
         if (boardFilters.user_id && String(card.created_by) !== boardFilters.user_id) return false;
         return true;
@@ -175,6 +162,12 @@ function renderCardMini(card) {
     customerHtml = `<div class="card-customer">${escapeHtml(card.customer_name)}</div>`;
   }
 
+  let descHtml = '';
+  if (card.description) {
+    const preview = card.description.length > 80 ? card.description.substring(0, 80) + '…' : card.description;
+    descHtml = `<div class="card-desc-preview">${escapeHtml(preview)}</div>`;
+  }
+
   return `
     <div class="board-card ${isOverdueCard ? 'overdue' : ''}"
          data-card-id="${card.id}"
@@ -182,10 +175,10 @@ function renderCardMini(card) {
       ${card.order_number ? `<div class="card-order">#${escapeHtml(card.order_number)}</div>` : ''}
       ${labelsHtml}
       <div class="card-title">${escapeHtml(card.title)}</div>
+      ${descHtml}
       ${customerHtml}
       <div class="card-meta">
         ${dueHtml}
-        ${locationBadge}
       </div>
       ${checklistHtml}
     </div>`;

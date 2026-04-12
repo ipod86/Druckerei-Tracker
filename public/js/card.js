@@ -46,22 +46,38 @@ async function renderCardModal(card) {
         <span class="card-group-breadcrumb" style="background:${groupColor}">${escapeHtml(card.group_name)} / ${escapeHtml(card.column_name)}</span>
       </div>
       <div style="display:flex;gap:6px">
-        ${canEdit ? `<button class="btn btn-sm btn-secondary" id="card-move-btn">Verschieben</button>` : ''}
         ${canEdit ? `<button class="btn btn-sm btn-warning" id="card-archive-btn">${card.archived ? 'Wiederherstellen' : 'Archivieren'}</button>` : ''}
         <a href="/api/cards/${card.id}/pdf" class="btn btn-sm btn-secondary" target="_blank">PDF</a>
         <button class="modal-close" id="card-close-btn">&times;</button>
       </div>
     </div>
-    ${isOverdue(card) && canEdit ? `
-    <div class="snooze-banner">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;flex-shrink:0"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-      <span>Erinnerung überfällig</span>
-      <div style="display:flex;align-items:center;gap:6px;margin-left:auto">
-        <span style="font-size:12px">Verschieben auf:</span>
-        <input type="date" id="snooze-date" style="font-size:12px;padding:2px 6px;border:1px solid rgba(255,255,255,.5);border-radius:4px;background:rgba(255,255,255,.15);color:inherit" min="${new Date().toISOString().slice(0,10)}">
-        <button class="btn btn-sm" id="snooze-btn" style="background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:inherit;padding:3px 10px">OK</button>
-      </div>
-    </div>` : ''}
+    ${canEdit && (isOverdue(card) || card.snoozed_until) ? (() => {
+      const isSnoozed = card.snoozed_until && parseDbDate(card.snoozed_until) > new Date();
+      if (isSnoozed) {
+        const snoozeDate = parseDbDate(card.snoozed_until).toLocaleDateString('de-DE');
+        return `
+        <div class="snooze-banner snooze-active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;flex-shrink:0"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          <span>Schlummert bis: <strong>${snoozeDate}</strong></span>
+          <div style="display:flex;align-items:center;gap:6px;margin-left:auto">
+            <input type="date" id="snooze-date" style="font-size:12px;padding:2px 6px;border:1px solid rgba(255,255,255,.5);border-radius:4px;background:rgba(255,255,255,.15);color:inherit" min="${new Date().toISOString().slice(0,10)}">
+            <button class="btn btn-sm" id="snooze-btn" style="background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:inherit;padding:3px 10px">Ändern</button>
+            <button class="btn btn-sm" id="snooze-cancel-btn" style="background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:inherit;padding:3px 10px">Aufwecken</button>
+          </div>
+        </div>`;
+      } else {
+        return `
+        <div class="snooze-banner">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;flex-shrink:0"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          <span>Erinnerung überfällig</span>
+          <div style="display:flex;align-items:center;gap:6px;margin-left:auto">
+            <span style="font-size:12px">Schlummern bis:</span>
+            <input type="date" id="snooze-date" style="font-size:12px;padding:2px 6px;border:1px solid rgba(255,255,255,.5);border-radius:4px;background:rgba(255,255,255,.15);color:inherit" min="${new Date().toISOString().slice(0,10)}">
+            <button class="btn btn-sm" id="snooze-btn" style="background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:inherit;padding:3px 10px">OK</button>
+          </div>
+        </div>`;
+      }
+    })() : ''}
     <div class="card-detail-layout">
       <div class="card-detail-main" id="card-detail-main">
         <!-- Title -->
@@ -80,8 +96,6 @@ async function renderCardModal(card) {
             <span id="card-customer-display">${escapeHtml(card.customer_name || '—')}</span>
             <span class="meta-label">Kunden-E-Mail</span>
             <span>${canEdit ? `<input type="email" class="inline-edit" id="card-customer-email" value="${escapeHtml(card.customer_email || '')}" placeholder="—">` : escapeHtml(card.customer_email || '—')}</span>
-            <span class="meta-label">Standort</span>
-            <span id="card-location-display">${escapeHtml(card.location_name || '—')}</span>
             <span class="meta-label">Erstellt von</span>
             <span>${escapeHtml(card.created_by_name || '—')}</span>
             <span class="meta-label">Erstellt am</span>
@@ -107,7 +121,10 @@ async function renderCardModal(card) {
         <div class="card-section">
           <div class="card-section-title">Beschreibung</div>
           ${canEdit ? `<textarea id="card-description" style="width:100%;border:1px solid var(--border);border-radius:var(--radius);padding:8px;font-size:13px;min-height:80px;resize:vertical" placeholder="Beschreibung...">${escapeHtml(card.description || '')}</textarea>
-          <button class="btn btn-sm btn-primary" id="save-description-btn" style="margin-top:6px">Speichern</button>` :
+          <div style="display:flex;gap:8px;margin-top:6px">
+            <button class="btn btn-sm btn-primary" id="save-description-btn">Speichern</button>
+            <button class="btn btn-sm btn-secondary" id="cancel-card-btn">Abbrechen</button>
+          </div>` :
           `<p>${escapeHtml(card.description || 'Keine Beschreibung')}</p>`}
         </div>
 
@@ -197,10 +214,6 @@ async function renderCardModal(card) {
         ${canEdit ? `
         <div style="margin-bottom:16px">
           <div class="card-section-title">Aktionen</div>
-          <button class="sidebar-action-btn" id="card-move-sidebar-btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 9l4-4 4 4"/><path d="M9 5v14"/><path d="M19 15l-4 4-4-4"/><path d="M15 19V5"/></svg>
-            Verschieben
-          </button>
           <button class="sidebar-action-btn" id="card-archive-sidebar-btn">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
             ${card.archived ? 'Wiederherstellen' : 'Archivieren'}
@@ -213,9 +226,6 @@ async function renderCardModal(card) {
           <div class="card-section-title">Kunde ändern</div>
           <select id="card-customer-select" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;margin-bottom:6px">
             <option value="">Kein Kunde</option>
-          </select>
-          <select id="card-location-select" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px">
-            <option value="">Kein Standort</option>
           </select>
           <button class="btn btn-sm btn-primary" id="save-meta-btn" style="margin-top:6px;width:100%">Speichern</button>
         </div>` : ''}
@@ -244,6 +254,9 @@ async function renderCardModal(card) {
       }
     });
 
+    // Cancel button
+    document.getElementById('cancel-card-btn')?.addEventListener('click', closeCardModal);
+
     // Description save
     document.getElementById('save-description-btn').addEventListener('click', async () => {
       const desc = document.getElementById('card-description').value;
@@ -252,7 +265,8 @@ async function renderCardModal(card) {
           method: 'PUT',
           body: JSON.stringify({ description: desc }),
         });
-        showToast('Gespeichert', 'success');
+        closeCardModal();
+        if (typeof refreshBoard === 'function') refreshBoard();
       } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
     });
 
@@ -277,19 +291,16 @@ async function renderCardModal(card) {
     // Save meta
     document.getElementById('save-meta-btn').addEventListener('click', async () => {
       const custId = document.getElementById('card-customer-select').value;
-      const locId = document.getElementById('card-location-select').value;
       try {
         await apiFetch(`/api/cards/${card.id}`, {
           method: 'PUT',
           body: JSON.stringify({
             customer_id: custId ? parseInt(custId) : null,
-            location_id: locId ? parseInt(locId) : null,
           }),
         });
         showToast('Gespeichert', 'success');
         const updatedCard = await apiFetch(`/api/cards/${card.id}`);
         document.getElementById('card-customer-display').textContent = updatedCard.customer_name || '—';
-        document.getElementById('card-location-display').textContent = updatedCard.location_name || '—';
       } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
     });
 
@@ -315,13 +326,25 @@ async function renderCardModal(card) {
       });
     }
 
+    // Snooze cancel (aufwecken)
+    const snoozeCancelBtn = document.getElementById('snooze-cancel-btn');
+    if (snoozeCancelBtn) {
+      snoozeCancelBtn.addEventListener('click', async () => {
+        try {
+          await apiFetch(`/api/cards/${card.id}/snooze`, {
+            method: 'POST',
+            body: JSON.stringify({ until: null }),
+          });
+          showToast('Schlummer beendet', 'success');
+          renderCardModal(await apiFetch(`/api/cards/${card.id}`));
+          if (typeof fetchAndRenderBoard === 'function') fetchAndRenderBoard();
+        } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
+      });
+    }
+
     // Archive
     document.getElementById('card-archive-btn').addEventListener('click', () => handleArchive(card));
     document.getElementById('card-archive-sidebar-btn').addEventListener('click', () => handleArchive(card));
-
-    // Move buttons
-    document.getElementById('card-move-btn').addEventListener('click', () => showMoveCardModal(card));
-    document.getElementById('card-move-sidebar-btn').addEventListener('click', () => showMoveCardModal(card));
 
     // Checklists
     setupChecklistHandlers(card.id, canEdit);
@@ -356,10 +379,7 @@ function autoResize(el) {
 
 async function loadMetaSelects(card) {
   try {
-    const [customers, locations] = await Promise.all([
-      apiFetch('/api/customers'),
-      apiFetch('/api/locations'),
-    ]);
+    const customers = await apiFetch('/api/customers');
 
     const custSel = document.getElementById('card-customer-select');
     if (custSel) {
@@ -369,17 +389,6 @@ async function loadMetaSelects(card) {
         opt.textContent = c.name + (c.company ? ' – ' + c.company : '');
         if (c.id === card.customer_id) opt.selected = true;
         custSel.appendChild(opt);
-      });
-    }
-
-    const locSel = document.getElementById('card-location-select');
-    if (locSel) {
-      locations.filter(l => l.active).forEach(l => {
-        const opt = document.createElement('option');
-        opt.value = l.id;
-        opt.textContent = l.name;
-        if (l.id === card.location_id) opt.selected = true;
-        locSel.appendChild(opt);
       });
     }
   } catch (e) {}

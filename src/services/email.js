@@ -54,9 +54,11 @@ function renderTemplate(template, vars) {
 
 async function sendTransitionEmails(cardId, toGroupId, fromGroupId) {
   const card = db.prepare(`
-    SELECT ca.*, col.name as column_name, cu.name as customer_name, cu.email as customer_email_val
+    SELECT ca.*, col.name as column_name, g.name as group_name,
+           cu.name as customer_name, cu.email as customer_email_val
     FROM cards ca
     JOIN columns col ON ca.column_id = col.id
+    JOIN groups g ON col.group_id = g.id
     LEFT JOIN customers cu ON ca.customer_id = cu.id
     WHERE ca.id = ?
   `).get(cardId);
@@ -76,6 +78,7 @@ async function sendTransitionEmails(cardId, toGroupId, fromGroupId) {
     card_title: card.title,
     order_number: card.order_number || '',
     column_name: card.column_name || '',
+    group_name: card.group_name || '',
     customer_name: card.customer_name || '',
     customer_email: card.customer_email || card.customer_email_val || '',
     due_date: card.due_date || '',

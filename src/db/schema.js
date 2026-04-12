@@ -38,6 +38,8 @@ function setupSchema(db) {
       name TEXT NOT NULL,
       order_index INTEGER NOT NULL DEFAULT 0,
       time_limit_hours REAL DEFAULT NULL,
+      time_limit_days INTEGER DEFAULT NULL,
+      escalation_time TEXT DEFAULT NULL,
       escalation_emails TEXT DEFAULT NULL,
       reminder_interval_hours REAL DEFAULT 24,
       color TEXT DEFAULT NULL

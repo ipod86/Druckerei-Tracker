@@ -462,16 +462,31 @@ window.formatDateShort = function(dateStr) {
   return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
 };
 
+// Parse SQLite UTC timestamps correctly (SQLite returns "YYYY-MM-DD HH:MM:SS" without 'Z')
+window.parseDbDate = function(str) {
+  if (!str) return null;
+  if (str.includes('T') || str.includes('Z') || str.includes('+')) return new Date(str);
+  return new Date(str.replace(' ', 'T') + 'Z');
+};
+
 window.isOverdue = function(card) {
   // If snoozed and snooze hasn't expired yet → not overdue
-  if (card.snoozed_until && new Date(card.snoozed_until) > new Date()) return false;
+  if (card.snoozed_until && parseDbDate(card.snoozed_until) > new Date()) return false;
 
   // Overdue by due_date
   if (card.due_date && new Date(card.due_date) < new Date()) return true;
 
-  // Overdue by column time limit
-  if (card.time_limit_hours && card.last_moved_at) {
-    const hoursInColumn = (Date.now() - new Date(card.last_moved_at)) / 3600000;
+  // Overdue by column time limit (days-based, preferred)
+  if (card.time_limit_days && card.last_moved_at) {
+    const movedAt = parseDbDate(card.last_moved_at);
+    const [h, m] = (card.escalation_time || '12:00').split(':').map(Number);
+    const deadline = new Date(movedAt);
+    deadline.setUTCDate(deadline.getUTCDate() + card.time_limit_days);
+    deadline.setUTCHours(h, m, 0, 0);
+    if (new Date() > deadline) return true;
+  } else if (card.time_limit_hours && card.last_moved_at) {
+    // Legacy hours-based fallback
+    const hoursInColumn = (Date.now() - parseDbDate(card.last_moved_at)) / 3600000;
     if (hoursInColumn > card.time_limit_hours) return true;
   }
 

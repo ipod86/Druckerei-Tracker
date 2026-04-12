@@ -102,4 +102,8 @@ db.transaction(() => {
 })();
 db.pragma('foreign_keys = ON');
 
+// Add time_limit_days and escalation_time to columns if missing
+try { db.exec('ALTER TABLE columns ADD COLUMN time_limit_days INTEGER DEFAULT NULL'); } catch (_) {}
+try { db.exec('ALTER TABLE columns ADD COLUMN escalation_time TEXT DEFAULT NULL'); } catch (_) {}
+
 module.exports = db;

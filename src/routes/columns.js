@@ -18,18 +18,20 @@ router.get('/', requireAuth, (req, res) => {
 
 // POST / - create column
 router.post('/', requireAdmin, (req, res) => {
-  const { group_id, name, time_limit_hours, escalation_emails, reminder_interval_hours, color } = req.body;
+  const { group_id, name, time_limit_hours, time_limit_days, escalation_time, escalation_emails, reminder_interval_hours, color } = req.body;
   if (!group_id || !name) return res.status(400).json({ error: 'group_id and name required' });
 
   const maxOrder = db.prepare('SELECT MAX(order_index) as mx FROM columns WHERE group_id = ?').get(group_id);
   const order_index = (maxOrder.mx !== null ? maxOrder.mx : -1) + 1;
 
   const result = db.prepare(`
-    INSERT INTO columns (group_id, name, order_index, time_limit_hours, escalation_emails, reminder_interval_hours, color)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO columns (group_id, name, order_index, time_limit_hours, time_limit_days, escalation_time, escalation_emails, reminder_interval_hours, color)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     group_id, name, order_index,
     time_limit_hours || null,
+    time_limit_days !== undefined ? (time_limit_days || null) : null,
+    escalation_time || null,
     escalation_emails ? JSON.stringify(escalation_emails) : null,
     reminder_interval_hours || 24,
     color || null
@@ -60,7 +62,7 @@ router.put('/reorder', requireAdmin, (req, res) => {
 
 // PUT /:id - update column
 router.put('/:id', requireAdmin, (req, res) => {
-  const { name, time_limit_hours, escalation_emails, reminder_interval_hours, color, group_id } = req.body;
+  const { name, time_limit_hours, time_limit_days, escalation_time, escalation_emails, reminder_interval_hours, color, group_id } = req.body;
   const col = db.prepare('SELECT * FROM columns WHERE id = ?').get(req.params.id);
   if (!col) return res.status(404).json({ error: 'Column not found' });
 
@@ -68,6 +70,8 @@ router.put('/:id', requireAdmin, (req, res) => {
     UPDATE columns SET
       name = COALESCE(?, name),
       time_limit_hours = ?,
+      time_limit_days = ?,
+      escalation_time = ?,
       escalation_emails = ?,
       reminder_interval_hours = COALESCE(?, reminder_interval_hours),
       color = ?,
@@ -76,6 +80,8 @@ router.put('/:id', requireAdmin, (req, res) => {
   `).run(
     name || null,
     time_limit_hours !== undefined ? time_limit_hours : col.time_limit_hours,
+    time_limit_days !== undefined ? (time_limit_days || null) : col.time_limit_days,
+    escalation_time !== undefined ? (escalation_time || null) : col.escalation_time,
     escalation_emails !== undefined ? JSON.stringify(escalation_emails) : col.escalation_emails,
     reminder_interval_hours || null,
     color !== undefined ? color : col.color,

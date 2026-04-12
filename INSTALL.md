@@ -63,7 +63,7 @@ http://<server-ip>:<port>
 | Feld       | Wert       |
 |------------|------------|
 | Benutzer   | `admin`    |
-| Passwort   | `admin123` |
+| Passwort   | `admin` |
 
 > **Passwort sofort nach dem ersten Login ändern!**
 
