@@ -271,7 +271,7 @@ router.get('/sysinfo', requireAdmin, (req, res) => {
 
 // POST /update - download ZIP from GitHub and restart
 router.post('/update', requireAdmin, async (req, res) => {
-  const { execSync, spawn } = require('child_process');
+  const { execSync } = require('child_process');
   const fsSync = require('fs');
   const appDir = path.resolve(__dirname, '../..');
   const logFile = path.join(appDir, 'update.log');
@@ -279,16 +279,24 @@ router.post('/update', requireAdmin, async (req, res) => {
   res.json({ success: true, message: 'Update wird im Hintergrund ausgeführt...' });
 
   const log = (msg) => {
-    fsSync.appendFileSync(logFile, msg + '\n');
+    try { fsSync.appendFileSync(logFile, msg + '\n'); } catch(_) {}
   };
 
   log(`\n\n=== Update gestartet: ${new Date().toISOString()} ===`);
 
-  const tmpZip  = `/tmp/druckerei-update-${process.pid}.zip`;
-  const tmpDir  = `/tmp/druckerei-update-${process.pid}`;
-  const zipUrl  = 'https://github.com/ipod86/Druckerei-Tracker/archive/refs/heads/main.zip';
+  const tmpZip = `/tmp/druckerei-update-${process.pid}.zip`;
+  const tmpDir = `/tmp/druckerei-update-${process.pid}`;
+  const zipUrl = 'https://github.com/ipod86/Druckerei-Tracker/archive/refs/heads/main.zip';
 
+  let success = false;
   try {
+    // Ensure rsync is available
+    try { execSync('which rsync', { timeout: 5000 }); }
+    catch(_) {
+      log('▸ rsync installieren...');
+      execSync('apt-get install -y rsync -qq', { timeout: 60000 });
+    }
+
     log('▸ Herunterladen...');
     execSync(`wget -q -O "${tmpZip}" "${zipUrl}"`, { timeout: 60000 });
 
@@ -296,31 +304,27 @@ router.post('/update', requireAdmin, async (req, res) => {
     execSync(`mkdir -p "${tmpDir}" && unzip -q "${tmpZip}" -d "${tmpDir}"`, { timeout: 30000 });
 
     log('▸ Dateien kopieren...');
-    // Copy everything except persistent dirs
     execSync(
-      `rsync -a --exclude=data/ --exclude=uploads/ --exclude=backups/ --exclude=.env --exclude=update.log --exclude=node_modules/ "${tmpDir}/Druckerei-Tracker-main/" "${appDir}/"`,
+      `rsync -a --delete --exclude=data/ --exclude=uploads/ --exclude=backups/ --exclude=.env --exclude=update.log --exclude=node_modules/ "${tmpDir}/Druckerei-Tracker-main/" "${appDir}/"`,
       { timeout: 30000 }
     );
 
     log('▸ Abhängigkeiten installieren...');
-    execSync(`npm install --omit=dev --prefix "${appDir}" 2>&1`, { timeout: 120000 });
+    execSync(`npm install --omit=dev 2>&1`, { cwd: appDir, timeout: 120000 });
 
-    log('=== Update erfolgreich, starte neu... ===');
+    log('=== Update erfolgreich ===');
+    success = true;
   } catch (e) {
-    log(`FEHLER: ${e.message}`);
+    log(`FEHLER: ${e.stderr ? e.stderr.toString() : e.message}`);
   } finally {
     try { execSync(`rm -rf "${tmpZip}" "${tmpDir}"`); } catch(_) {}
   }
 
-  // Restart regardless so the new code loads (or old code keeps running on error)
-  const child = spawn(process.execPath, [path.join(appDir, 'src/server.js')], {
-    detached: true,
-    stdio: ['ignore', fsSync.openSync(logFile, 'a'), fsSync.openSync(logFile, 'a')],
-    cwd: appDir,
-    env: process.env,
-  });
-  child.unref();
-  setTimeout(() => process.exit(0), 500);
+  if (success) {
+    log('▸ Neustart...');
+    // Let systemd restart the service (Restart=always), or fall back to self-restart
+    setTimeout(() => process.exit(0), 500);
+  }
 });
 
 // GET /update-log
