@@ -479,14 +479,13 @@ body.board-active .main-content {
 .board-column {
   width: 240px;
   min-width: 240px;
-  flex-shrink: 0;           /* never collapse columns */
+  flex-shrink: 0;
   padding: 8px;
   background: transparent;
   display: flex;
   flex-direction: column;
   gap: 0;
   min-height: 0;
-  overflow: hidden;
 }
 .column-header {
   display: flex;
@@ -494,11 +493,19 @@ body.board-active .main-content {
   justify-content: space-between;
   padding: 6px 4px;
   margin-bottom: 4px;
+  flex-shrink: 0;
 }
 .column-title {
   font-size: 13px;
   font-weight: 600;
   color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .column-count {
   background: var(--bg);
@@ -507,11 +514,13 @@ body.board-active .main-content {
   border-radius: 10px;
   font-size: 12px;
   font-weight: 600;
+  flex-shrink: 0;
 }
 .column-cards {
   flex: 1;
-  min-height: 60px;
+  min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   border-radius: var(--radius);
   padding: 4px;
   transition: background 0.15s;
@@ -521,20 +530,43 @@ body.board-active .main-content {
   background: rgba(37, 99, 235, 0.08);
   outline: 2px dashed var(--primary);
 }
-.add-card-btn {
-  margin-top: 4px;
-  padding: 6px;
+.add-card-btn-icon {
+  display: block;
+  width: 100%;
+  padding: 5px 8px;
+  margin-bottom: 4px;
   background: transparent;
   border: 1px dashed var(--border);
   border-radius: var(--radius);
   color: var(--text-muted);
   font-size: 12px;
   cursor: pointer;
-  width: 100%;
   text-align: center;
+  flex-shrink: 0;
   transition: all 0.15s;
 }
-.add-card-btn:hover { background: var(--bg); color: var(--text); border-color: var(--secondary); }
+.add-card-btn-icon:hover {
+  background: var(--bg);
+  border-color: var(--secondary);
+  color: var(--text);
+}
+.add-divider-btn {
+  padding: 3px 5px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.add-divider-btn:hover {
+  background: var(--bg);
+  border-color: var(--border);
+  color: var(--text);
+}
 
 /* ===== CARD ===== */
 .board-card {

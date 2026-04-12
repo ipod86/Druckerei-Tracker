@@ -90,25 +90,27 @@ function renderBoard() {
 
       html += `<div class="board-column" data-column-id="${col.id}">
         <div class="column-header">
-          <span class="column-title">${escapeHtml(col.name)}</span>
-          <span class="column-count">${cards.length}</span>
+          <span class="column-title">${escapeHtml(col.name)}<span class="column-count">${cards.length}</span></span>
+          ${(currentUser && currentUser.role !== 'readonly') ? `
+          <button class="add-divider-btn" data-column-id="${col.id}" title="Überschrift hinzufügen">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;display:block">
+              <line x1="3" y1="8" x2="21" y2="8" stroke-width="2.5"/>
+              <line x1="3" y1="13" x2="15" y2="13"/>
+              <line x1="3" y1="17" x2="12" y2="17"/>
+            </svg>
+          </button>` : ''}
         </div>
+        ${(currentUser && currentUser.role !== 'readonly') ? `
+        <button class="add-card-btn-icon" data-column-id="${col.id}" data-column-name="${escapeHtml(col.name)}" title="Karte hinzufügen">
+          + Karte
+        </button>` : ''}
         <div class="column-cards" id="col-${col.id}" data-column-id="${col.id}" data-group-id="${group.id}" data-group-order="${group.order_index}">`;
 
       for (const card of cards) {
         html += renderCardMini(card);
       }
 
-      html += `</div>`;
-
-      if (currentUser && currentUser.role !== 'readonly') {
-        html += `<div style="display:flex;gap:4px">
-          <button class="add-card-btn" style="flex:1" data-column-id="${col.id}" data-column-name="${escapeHtml(col.name)}">+ Karte hinzufügen</button>
-          <button class="add-divider-btn" data-column-id="${col.id}" title="Überschrift hinzufügen" style="padding:6px 8px;background:transparent;border:1px dashed var(--border);border-radius:var(--radius);color:var(--text-muted);cursor:pointer;font-size:14px">≡</button>
-        </div>`;
-      }
-
-      html += `</div>`;
+      html += `</div></div>`;
     }
 
     html += `</div></div>`;
@@ -127,8 +129,9 @@ function renderCardMini(card) {
     return `
       <div class="board-divider"
            data-card-id="${card.id}"
-           data-column-id="${card.column_id}">
-        <span class="board-divider-text">${escapeHtml(card.title)}</span>
+           data-column-id="${card.column_id}"
+           title="Doppelklick zum Bearbeiten">
+        <span class="board-divider-text" data-card-id="${card.id}">${escapeHtml(card.title)}</span>
         <button class="board-divider-delete" data-card-id="${card.id}" title="Überschrift löschen">&times;</button>
       </div>`;
   }
@@ -254,7 +257,7 @@ function setupBoardEvents() {
   });
 
   // Add card buttons
-  document.querySelectorAll('.add-card-btn').forEach(btn => {
+  document.querySelectorAll('.add-card-btn-icon').forEach(btn => {
     btn.addEventListener('click', () => {
       showCreateCardModal(btn.dataset.columnId, btn.dataset.columnName);
     });
@@ -271,6 +274,24 @@ function setupBoardEvents() {
           body: JSON.stringify({ title: name.trim(), column_id: parseInt(btn.dataset.columnId), card_type: 'divider' }),
         });
         fetchAndRenderBoard();
+      } catch(e) { showToast('Fehler: ' + e.message, 'error'); }
+    });
+  });
+
+  // Edit divider on double-click
+  document.querySelectorAll('.board-divider-text').forEach(el => {
+    el.addEventListener('dblclick', async (e) => {
+      e.stopPropagation();
+      const cardId = el.dataset.cardId;
+      const current = el.textContent.trim();
+      const newName = prompt('Überschrift bearbeiten:', current);
+      if (!newName || !newName.trim() || newName.trim() === current) return;
+      try {
+        await apiFetch(`/api/cards/${cardId}`, {
+          method: 'PUT',
+          body: JSON.stringify({ title: newName.trim() }),
+        });
+        el.textContent = newName.trim();
       } catch(e) { showToast('Fehler: ' + e.message, 'error'); }
     });
   });
