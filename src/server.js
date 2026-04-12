@@ -9,6 +9,11 @@ const fs = require('fs');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Trust Cloudflare / reverse proxy (set TRUST_PROXY=1 in .env when behind Cloudflare)
+if (process.env.TRUST_PROXY) {
+  app.set('trust proxy', parseInt(process.env.TRUST_PROXY) || 1);
+}
+
 // Ensure data directory exists
 const dbPath = path.resolve(process.env.DB_PATH || './data/database.sqlite');
 const dataDir = path.dirname(dbPath);
@@ -16,10 +21,25 @@ if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
+// ── Security headers ─────────────────────────────────────────────────────────
+app.use((req, res, next) => {
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.set('X-Frame-Options', 'DENY');
+  res.set('X-XSS-Protection', '1; mode=block');
+  res.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  // Only send HSTS when actually behind HTTPS
+  if (req.secure || req.headers['x-forwarded-proto'] === 'https') {
+    res.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+  next();
+});
+
 // Session store
 const SQLiteStore = require('connect-sqlite3')(session);
 const sessionDbPath = path.join(dataDir, 'sessions.sqlite');
 
+const isHttps = !!process.env.TRUST_PROXY;
 app.use(session({
   store: new SQLiteStore({ db: 'sessions.sqlite', dir: dataDir }),
   secret: process.env.SESSION_SECRET || 'change-me',
@@ -28,7 +48,8 @@ app.use(session({
   cookie: {
     maxAge: parseInt(process.env.SESSION_TIMEOUT_MINUTES || '60') * 60 * 1000,
     httpOnly: true,
-    secure: false,
+    secure: isHttps,
+    sameSite: 'strict',
   }
 }));
 
@@ -90,10 +111,10 @@ app.get(/^(?!\/api\/).*/, (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
 });
 
-// Error handler
+// Error handler — never leak stack traces to client
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({ error: 'Internal server error', message: err.message });
+  res.status(500).json({ error: 'Internal server error' });
 });
 
 // Start scheduler

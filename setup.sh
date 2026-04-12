@@ -136,6 +136,8 @@ DB_PATH=./data/database.sqlite
 UPLOAD_PATH=./uploads
 BACKUP_PATH=./backups
 SESSION_TIMEOUT_MINUTES=60
+# Bei Betrieb hinter Cloudflare / Reverse Proxy aktivieren (sichere Cookies + echte Client-IP):
+# TRUST_PROXY=1
 EOF
   echo "✓ .env erstellt (Session-Secret automatisch generiert)"
 else
