@@ -1540,25 +1540,76 @@ async function loadSysinfo(content) {
 
   document.getElementById('do-update-btn').addEventListener('click', async () => {
     if (!await showConfirm('Update installieren', 'Das Tool wird aktualisiert und kurz neu gestartet. Fortfahren?')) return;
+    const btn = document.getElementById('do-update-btn');
+    const logBox = document.getElementById('update-log-box');
+    btn.disabled = true;
+    btn.textContent = '⏳ Herunterladen...';
+    logBox.style.display = '';
+    logBox.textContent = '';
     try {
       await apiFetch('/api/admin/update', { method: 'POST' });
-      const logBox = document.getElementById('update-log-box');
-      logBox.style.display = '';
-      logBox.textContent = 'Update läuft...';
-      showToast('Update gestartet', 'info');
+    } catch(e) { showToast('Fehler: ' + e.message, 'error'); btn.disabled = false; btn.textContent = 'Update installieren'; return; }
 
-      // Poll update log
-      let polls = 0;
-      const interval = setInterval(async () => {
-        try {
-          const logData = await apiFetch('/api/admin/update-log');
-          logBox.textContent = logData.log || '';
+    // Phase 1: poll log while server is still running
+    let lastLog = '';
+    let serverGone = false;
+    const steps = ['⏳ Herunterladen...', '📦 Entpacken...', '📁 Kopieren...', '🔧 Abhängigkeiten...', '🔄 Neustart...'];
+    let stepIdx = 0;
+    const stepInterval = setInterval(() => {
+      stepIdx = Math.min(stepIdx + 1, steps.length - 1);
+      btn.textContent = steps[stepIdx];
+    }, 4000);
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const logData = await apiFetch('/api/admin/update-log');
+        const newLog = logData.log || '';
+        if (newLog !== lastLog) {
+          lastLog = newLog;
+          logBox.textContent = newLog;
           logBox.scrollTop = logBox.scrollHeight;
-          polls++;
-          if (polls > 30) clearInterval(interval);
-        } catch(e) { clearInterval(interval); }
+        }
+        // Check if update finished successfully
+        if (newLog.includes('=== Update erfolgreich ===') && !serverGone) {
+          serverGone = true;
+          clearInterval(pollInterval);
+          clearInterval(stepInterval);
+          btn.textContent = '🔄 Neustart läuft...';
+          // Wait for server to go down then come back
+          waitForRestart();
+        }
+      } catch(e) {
+        // Server went down = restart in progress
+        if (!serverGone) {
+          serverGone = true;
+          clearInterval(pollInterval);
+          clearInterval(stepInterval);
+          btn.textContent = '🔄 Neustart läuft...';
+          waitForRestart();
+        }
+      }
+    }, 2000);
+
+    function waitForRestart() {
+      logBox.textContent = (lastLog || '') + '\n▸ Warte auf Neustart...';
+      logBox.scrollTop = logBox.scrollHeight;
+      let tries = 0;
+      const checkAlive = setInterval(async () => {
+        tries++;
+        try {
+          await fetch(window.location.origin + '/api/labels', { credentials: 'same-origin' });
+          // Server is back
+          clearInterval(checkAlive);
+          btn.textContent = '✓ Update abgeschlossen';
+          logBox.textContent = (lastLog || '') + '\n✓ Server läuft wieder.';
+          logBox.scrollTop = logBox.scrollHeight;
+          showToast('Update erfolgreich – Seite wird neu geladen', 'success');
+          setTimeout(() => window.location.reload(), 2000);
+        } catch(_) {
+          if (tries > 60) { clearInterval(checkAlive); btn.textContent = 'Update installieren'; btn.disabled = false; }
+        }
       }, 2000);
-    } catch(e) { showToast('Fehler: ' + e.message, 'error'); }
+    }
   });
 
   document.getElementById('check-npm-outdated-btn').addEventListener('click', async () => {
