@@ -395,8 +395,12 @@ body {
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
 }
-/* Board page doesn't scroll vertically itself — board-wrapper does */
-#page-board { overflow: visible; }
+/* Board page: lock all vertical scroll so swipes in empty column space don't move the page */
+#page-board { overflow: hidden; height: calc(100vh - var(--nav-height)); }
+body.board-active,
+body.board-active .main-content {
+  overflow: hidden;
+}
 
 /* ===== PAGE HEADER ===== */
 .page-header {
@@ -635,6 +639,19 @@ body {
   color: #166534;
 }
 .card-due.overdue { background: #fee2e2; color: #991b1b; }
+.card-files-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 1px 5px;
+  border-radius: 10px;
+  background: var(--bg);
+  margin-left: 5px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
 .card-checklist-progress {
   margin-top: 6px;
 }

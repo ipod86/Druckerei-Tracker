@@ -120,11 +120,7 @@ async function renderCardModal(card) {
         <!-- Description -->
         <div class="card-section">
           <div class="card-section-title">Beschreibung</div>
-          ${canEdit ? `<textarea id="card-description" style="width:100%;border:1px solid var(--border);border-radius:var(--radius);padding:8px;font-size:13px;min-height:80px;resize:vertical" placeholder="Beschreibung...">${escapeHtml(card.description || '')}</textarea>
-          <div style="display:flex;gap:8px;margin-top:6px">
-            <button class="btn btn-sm btn-primary" id="save-description-btn">Speichern</button>
-            <button class="btn btn-sm btn-secondary" id="cancel-card-btn">Abbrechen</button>
-          </div>` :
+          ${canEdit ? `<textarea id="card-description" style="width:100%;border:1px solid var(--border);border-radius:var(--radius);padding:8px;font-size:13px;min-height:80px;resize:vertical" placeholder="Beschreibung...">${escapeHtml(card.description || '')}</textarea>` :
           `<p>${escapeHtml(card.description || 'Keine Beschreibung')}</p>`}
         </div>
 
@@ -207,6 +203,13 @@ async function renderCardModal(card) {
             ${renderHistory(card.history || [])}
           </div>
         </div>
+
+        ${canEdit ? `
+        <!-- Global Save -->
+        <div class="card-section" style="display:flex;gap:8px;padding-top:4px">
+          <button class="btn btn-primary" id="save-card-btn">Speichern</button>
+          <button class="btn btn-secondary" id="cancel-card-btn">Abbrechen</button>
+        </div>` : ''}
       </div>
 
       <!-- Sidebar -->
@@ -227,7 +230,6 @@ async function renderCardModal(card) {
           <select id="card-customer-select" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;margin-bottom:6px">
             <option value="">Kein Kunde</option>
           </select>
-          <button class="btn btn-sm btn-primary" id="save-meta-btn" style="margin-top:6px;width:100%">Speichern</button>
         </div>` : ''}
       </div>
     </div>
@@ -255,22 +257,26 @@ async function renderCardModal(card) {
     });
 
     // Cancel button
-    document.getElementById('cancel-card-btn')?.addEventListener('click', closeCardModal);
+    document.getElementById('cancel-card-btn').addEventListener('click', closeCardModal);
 
-    // Description save
-    document.getElementById('save-description-btn').addEventListener('click', async () => {
+    // Global save button
+    document.getElementById('save-card-btn').addEventListener('click', async () => {
       const desc = document.getElementById('card-description').value;
+      const custId = document.getElementById('card-customer-select')?.value;
       try {
         await apiFetch(`/api/cards/${card.id}`, {
           method: 'PUT',
-          body: JSON.stringify({ description: desc }),
+          body: JSON.stringify({
+            description: desc,
+            customer_id: custId ? parseInt(custId) : null,
+          }),
         });
         closeCardModal();
         if (typeof refreshBoard === 'function') refreshBoard();
       } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
     });
 
-    // Order number and due date
+    // Order number, due date, customer email save on blur
     ['card-order-num', 'card-due-date', 'card-customer-email'].forEach(id => {
       const el = document.getElementById(id);
       if (!el) return;
@@ -285,24 +291,8 @@ async function renderCardModal(card) {
       });
     });
 
-    // Load customer and location selects
+    // Load customer select
     loadMetaSelects(card);
-
-    // Save meta
-    document.getElementById('save-meta-btn').addEventListener('click', async () => {
-      const custId = document.getElementById('card-customer-select').value;
-      try {
-        await apiFetch(`/api/cards/${card.id}`, {
-          method: 'PUT',
-          body: JSON.stringify({
-            customer_id: custId ? parseInt(custId) : null,
-          }),
-        });
-        showToast('Gespeichert', 'success');
-        const updatedCard = await apiFetch(`/api/cards/${card.id}`);
-        document.getElementById('card-customer-display').textContent = updatedCard.customer_name || '—';
-      } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
-    });
 
     // Labels
     setupLabelHandlers(card.id, card.labels || []);

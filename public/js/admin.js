@@ -559,6 +559,7 @@ async function loadEmailTemplates(content) {
         <code>{{column_name}}</code> – Spaltenname &nbsp;|&nbsp;
         <code>{{group_name}}</code> – Gruppenname &nbsp;|&nbsp;
         <code>{{customer_name}}</code> – Kundenname &nbsp;|&nbsp;
+        <code>{{company_name}}</code> – Firmenname &nbsp;|&nbsp;
         <code>{{customer_email}}</code> – Kunden-E-Mail &nbsp;|&nbsp;
         <code>{{due_date}}</code> – Fälligkeitsdatum &nbsp;|&nbsp;
         <code>{{app_name}}</code> – Name der Anwendung
@@ -1284,6 +1285,10 @@ async function loadBackup(content) {
         <button class="btn btn-secondary" id="run-backup-btn">Backup jetzt ausführen</button>
       </div>
       <div id="backup-result" style="margin-top:12px"></div>
+
+      <div class="admin-section-title" style="margin-top:24px">Wiederherstellen</div>
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:10px">Backup auswählen und wiederherstellen. Die App startet danach automatisch neu.</p>
+      <div id="backup-list-container"><span style="font-size:13px;color:var(--text-muted)">Lade Backups…</span></div>
     </div>
   `;
 
@@ -1306,10 +1311,50 @@ async function loadBackup(content) {
     try {
       const res = await apiFetch('/api/admin/backup/run', { method: 'POST' });
       result.innerHTML = `<span style="color:var(--success)">✓ Backup abgeschlossen: ${escapeHtml(res.path)}</span>`;
+      loadBackupList();
     } catch (e) {
       result.innerHTML = `<span style="color:var(--danger)">✗ Fehler: ${escapeHtml(e.message)}</span>`;
     }
   });
+
+  async function loadBackupList() {
+    const container = document.getElementById('backup-list-container');
+    if (!container) return;
+    try {
+      const backups = await apiFetch('/api/admin/backup/list');
+      if (!backups.length) {
+        container.innerHTML = '<span style="font-size:13px;color:var(--text-muted)">Keine Backups vorhanden.</span>';
+        return;
+      }
+      container.innerHTML = `<table class="admin-table">
+        <thead><tr><th>Backup</th><th>Erstellt</th><th></th></tr></thead>
+        <tbody>
+          ${backups.map(b => `
+            <tr>
+              <td><code style="font-size:12px">${escapeHtml(b.name)}</code></td>
+              <td style="font-size:12px">${new Date(b.created_at).toLocaleString('de-DE')}</td>
+              <td><button class="btn btn-sm btn-danger restore-btn" data-name="${escapeHtml(b.name)}">Wiederherstellen</button></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>`;
+      container.querySelectorAll('.restore-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const name = btn.dataset.name;
+          if (!await showConfirm('Backup wiederherstellen', `"${name}" wiederherstellen? Aktuelle Daten werden überschrieben. Die App startet danach neu.`)) return;
+          try {
+            btn.disabled = true; btn.textContent = 'Wird wiederhergestellt…';
+            await apiFetch('/api/admin/backup/restore', { method: 'POST', body: JSON.stringify({ backup_name: name }) });
+            showToast('Restore läuft, App startet neu…', 'success');
+          } catch(e) { showToast('Fehler: ' + e.message, 'error'); btn.disabled = false; btn.textContent = 'Wiederherstellen'; }
+        });
+      });
+    } catch(e) {
+      container.innerHTML = `<span style="font-size:13px;color:var(--danger)">Fehler: ${escapeHtml(e.message)}</span>`;
+    }
+  }
+
+  loadBackupList();
 }
 
 // ===== Archive Settings =====
@@ -1398,6 +1443,7 @@ async function loadSysinfo(content) {
         ${[
           ['Version', `v${info.version}`],
           ['Node.js', info.node_version],
+          ['Betriebssystem', info.os_info],
           ['Laufzeit', formatUptime(info.uptime_seconds)],
           ['Speicher', `${info.memory_mb} MB`],
           ['Datenbank', info.db_size],
@@ -1409,10 +1455,43 @@ async function loadSysinfo(content) {
         ].map(([label, val]) => `
           <div style="background:var(--bg);border-radius:var(--radius);padding:12px">
             <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">${label}</div>
-            <div style="font-size:16px;font-weight:700">${escapeHtml(String(val))}</div>
+            <div style="font-size:14px;font-weight:700">${escapeHtml(String(val))}</div>
           </div>
         `).join('')}
       </div>
+
+      <div class="admin-section-title" style="display:flex;align-items:center;justify-content:space-between">
+        <span>npm-Module</span>
+        <button class="btn btn-sm btn-secondary" id="check-npm-outdated-btn">Auf Updates prüfen</button>
+      </div>
+      <div id="npm-outdated-box" style="margin-bottom:8px"></div>
+      <table class="admin-table" style="margin-bottom:24px">
+        <thead><tr><th>Paket</th><th>Installiert</th><th>Benötigt</th></tr></thead>
+        <tbody>
+          ${(info.npm_modules || []).map(m => `
+            <tr>
+              <td><code>${escapeHtml(m.name)}</code></td>
+              <td>${escapeHtml(m.version)}</td>
+              <td style="color:var(--text-muted);font-size:12px">${escapeHtml(m.required)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+
+      ${info.system_packages && info.system_packages.length > 0 ? `
+      <div class="admin-section-title">Systempakete (dpkg)</div>
+      <table class="admin-table" style="margin-bottom:24px">
+        <thead><tr><th>Paket</th><th>Version</th></tr></thead>
+        <tbody>
+          ${info.system_packages.map(p => `
+            <tr>
+              <td><code>${escapeHtml(p.name)}</code></td>
+              <td>${escapeHtml(p.version)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>` : ''}
+
 
       <div class="admin-section-title">Update</div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
@@ -1421,7 +1500,7 @@ async function loadSysinfo(content) {
           <span id="latest-version-badge" style="margin-left:12px;font-size:12px;color:var(--text-muted)">Prüfe GitHub...</span>
         </div>
         <button class="btn btn-secondary btn-sm" id="check-update-btn">Auf Updates prüfen</button>
-        <button class="btn btn-primary btn-sm" id="do-update-btn" style="display:none">Update installieren</button>
+        <button class="btn btn-primary btn-sm" id="do-update-btn">Update installieren</button>
       </div>
       <pre id="update-log-box" style="background:#1a1a1a;color:#ddd;padding:12px;border-radius:var(--radius);font-size:11px;max-height:300px;overflow-y:auto;white-space:pre-wrap;display:none"></pre>
     </div>
@@ -1441,15 +1520,14 @@ async function loadSysinfo(content) {
         } else {
           badge.textContent = `Neue Version verfügbar: ${vdata.tag_name}`;
           badge.style.color = 'var(--warning)';
-          const btn = document.getElementById('do-update-btn');
-          if (btn) btn.style.display = '';
         }
       } else {
-        badge.textContent = 'GitHub nicht erreichbar';
+        badge.textContent = vdata.error ? 'GitHub nicht erreichbar' : 'Keine Release-Info';
+        badge.style.color = 'var(--text-muted)';
       }
     } catch(e) {
       const badge = document.getElementById('latest-version-badge');
-      if (badge) badge.textContent = 'Prüfung fehlgeschlagen';
+      if (badge) { badge.textContent = 'GitHub nicht erreichbar'; badge.style.color = 'var(--text-muted)'; }
     }
   }
 
@@ -1481,5 +1559,42 @@ async function loadSysinfo(content) {
         } catch(e) { clearInterval(interval); }
       }, 2000);
     } catch(e) { showToast('Fehler: ' + e.message, 'error'); }
+  });
+
+  document.getElementById('check-npm-outdated-btn').addEventListener('click', async () => {
+    const box = document.getElementById('npm-outdated-box');
+    const btn = document.getElementById('check-npm-outdated-btn');
+    btn.disabled = true;
+    btn.textContent = 'Prüfe...';
+    box.innerHTML = '<span style="font-size:12px;color:var(--text-muted)">npm outdated wird ausgeführt…</span>';
+    try {
+      const data = await apiFetch('/api/admin/npm-outdated');
+      btn.disabled = false;
+      btn.textContent = 'Auf Updates prüfen';
+      if (!data.packages || data.packages.length === 0) {
+        box.innerHTML = '<div style="font-size:12px;color:var(--success);padding:6px 0">Alle npm-Pakete sind aktuell.</div>';
+        return;
+      }
+      box.innerHTML = `
+        <table class="admin-table" style="margin-bottom:8px">
+          <thead><tr><th>Paket</th><th>Installiert</th><th>Gewünscht</th><th style="color:var(--warning)">Neueste</th></tr></thead>
+          <tbody>
+            ${data.packages.map(p => `
+              <tr>
+                <td><code>${escapeHtml(p.name)}</code></td>
+                <td>${escapeHtml(p.current)}</td>
+                <td>${escapeHtml(p.wanted)}</td>
+                <td style="font-weight:600;color:var(--warning)">${escapeHtml(p.latest)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        <div style="font-size:12px;color:var(--text-muted)">Updates werden mit dem "Update installieren"-Button eingespielt (npm install).</div>
+      `;
+    } catch(e) {
+      btn.disabled = false;
+      btn.textContent = 'Auf Updates prüfen';
+      box.innerHTML = `<span style="font-size:12px;color:var(--danger)">Fehler: ${escapeHtml(e.message)}</span>`;
+    }
   });
 }

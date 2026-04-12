@@ -32,6 +32,16 @@ if systemctl is-active --quiet "$APP_NAME" 2>/dev/null; then
   sudo systemctl stop "$APP_NAME"
 fi
 
+# ── Dedizierter System-User ─────────────────────────────────────────────────
+APP_USER="druckerei"
+if ! id "$APP_USER" &>/dev/null; then
+  echo "▸ System-User '$APP_USER' wird angelegt..."
+  sudo useradd --system --no-create-home --shell /usr/sbin/nologin --comment "Druckerei Tracker Service" "$APP_USER"
+  echo "✓ User '$APP_USER' angelegt (kein Shell-Zugriff)"
+else
+  echo "✓ User '$APP_USER' bereits vorhanden"
+fi
+
 # ── Port abfragen ───────────────────────────────────────────────────────────
 while true; do
   read -rp "Port [3000]: " PORT
@@ -85,9 +95,13 @@ cd "$APP_DIR"
 npm install --omit=dev 2>&1 | grep -E "^(npm warn|npm error|added)" || true
 echo "✓ Abhängigkeiten installiert"
 
-# ── Verzeichnisse anlegen ───────────────────────────────────────────────────
+# ── Verzeichnisse anlegen und Berechtigungen setzen ─────────────────────────
 mkdir -p "$APP_DIR/data" "$APP_DIR/uploads/branding" "$APP_DIR/uploads/attachments" "$APP_DIR/backups"
-echo "✓ Verzeichnisse angelegt"
+sudo chown -R "$APP_USER:$APP_USER" "$APP_DIR/data" "$APP_DIR/uploads" "$APP_DIR/backups"
+# .env lesbar für Service-User
+sudo chown root:"$APP_USER" "$APP_DIR/.env" 2>/dev/null || true
+sudo chmod 640 "$APP_DIR/.env" 2>/dev/null || true
+echo "✓ Verzeichnisse angelegt und Berechtigungen gesetzt"
 
 # ── .env anlegen (falls nicht vorhanden) ────────────────────────────────────
 if [ ! -f "$APP_DIR/.env" ]; then
@@ -106,14 +120,26 @@ else
   sed -i "s/^PORT=.*/PORT=${PORT}/" "$APP_DIR/.env"
   echo "✓ .env vorhanden (Port aktualisiert)"
 fi
+sudo chown root:"$APP_USER" "$APP_DIR/.env" 2>/dev/null || true
+sudo chmod 640 "$APP_DIR/.env" 2>/dev/null || true
 
 # ── Datenbank initialisieren ────────────────────────────────────────────────
 echo "▸ Datenbank initialisieren..."
 node -e "require('./src/db/database.js')" && echo "✓ Datenbank bereit"
+sudo chown "$APP_USER:$APP_USER" "$APP_DIR/data/database.sqlite" 2>/dev/null || true
+
+# ── Sudo-Regel für App-Updates (git pull + npm install ohne Passwort) ────────
+SUDOERS_FILE="/etc/sudoers.d/${APP_NAME}"
+sudo tee "$SUDOERS_FILE" > /dev/null << EOF
+# Erlaubt dem $APP_USER-Service git pull und npm install für App-Updates
+$APP_USER ALL=(root) NOPASSWD: /usr/bin/git -C ${APP_DIR} pull origin main
+$APP_USER ALL=(root) NOPASSWD: /usr/bin/npm install --production
+EOF
+sudo chmod 440 "$SUDOERS_FILE"
+echo "✓ Sudo-Regel für App-Updates eingerichtet"
 
 # ── Systemd-Service ─────────────────────────────────────────────────────────
 if [[ "${AUTOSTART^^}" == "Y" ]]; then
-  RUN_USER="${SUDO_USER:-$(whoami)}"
   sudo tee "$SERVICE_FILE" > /dev/null << EOF
 [Unit]
 Description=Druckerei Tracker
@@ -121,7 +147,8 @@ After=network.target
 
 [Service]
 Type=simple
-User=${RUN_USER}
+User=${APP_USER}
+Group=${APP_USER}
 WorkingDirectory=${APP_DIR}
 ExecStart=$(command -v node) src/server.js
 Restart=on-failure
@@ -129,6 +156,9 @@ RestartSec=5
 EnvironmentFile=${APP_DIR}/.env
 StandardOutput=journal
 StandardError=journal
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=${APP_DIR}/data ${APP_DIR}/uploads ${APP_DIR}/backups ${APP_DIR}/update.log
 
 [Install]
 WantedBy=multi-user.target

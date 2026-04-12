@@ -122,6 +122,7 @@ router.get('/board', requireAuth, (req, res) => {
            l.name as location_name,
            (SELECT COUNT(*) FROM checklist_items ci JOIN checklists ch ON ci.checklist_id = ch.id WHERE ch.card_id = ca.id) as checklist_total,
            (SELECT COUNT(*) FROM checklist_items ci JOIN checklists ch ON ci.checklist_id = ch.id WHERE ch.card_id = ca.id AND ci.completed = 1) as checklist_done,
+           (SELECT COUNT(*) FROM card_files cf WHERE cf.card_id = ca.id) as files_count,
            COALESCE(
              (SELECT MAX(h.created_at) FROM card_history h WHERE h.card_id = ca.id AND h.action_type IN ('moved','created')),
              ca.created_at
@@ -318,6 +319,18 @@ router.delete('/:id', requireEmployee, (req, res) => {
       .run(req.params.id, 'archived', req.user.id, JSON.stringify({}));
   }
   res.json({ success: true });
+});
+
+// POST /reorder - update positions within a column (no history/timestamp change)
+router.post('/reorder', requireEmployee, (req, res) => {
+  const { column_id, card_ids } = req.body;
+  if (!column_id || !Array.isArray(card_ids)) return res.status(400).json({ error: 'column_id and card_ids required' });
+  const update = db.prepare('UPDATE cards SET position = ? WHERE id = ? AND column_id = ?');
+  const updateAll = db.transaction((ids) => {
+    ids.forEach((id, idx) => update.run((idx + 1) * 1000, id, column_id));
+  });
+  updateAll(card_ids);
+  res.json({ ok: true });
 });
 
 // POST /:id/move - move card to new column

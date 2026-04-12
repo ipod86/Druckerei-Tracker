@@ -182,13 +182,20 @@ function renderCardMini(card) {
     descHtml = `<div class="card-desc-preview">${escapeHtml(preview)}</div>`;
   }
 
+  const filesHtml = card.files_count > 0
+    ? `<span class="card-files-badge" title="${card.files_count} Anhang${card.files_count !== 1 ? '¨e' : ''}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+        ${card.files_count}
+      </span>`
+    : '';
+
   return `
     <div class="board-card ${isOverdueCard ? 'overdue' : ''}"
          data-card-id="${card.id}"
          data-column-id="${card.column_id}">
       ${card.order_number ? `<div class="card-order">#${escapeHtml(card.order_number)}</div>` : ''}
       ${labelsHtml}
-      <div class="card-title">${escapeHtml(card.title)}</div>
+      <div class="card-title">${escapeHtml(card.title)}${filesHtml}</div>
       ${descHtml}
       ${customerHtml}
       <div class="card-meta">
@@ -211,11 +218,13 @@ function setupBoardEvents() {
       delay: 150,
       delayOnTouchOnly: true,
       touchStartThreshold: 5,
-      scroll: true,
+      scroll: col,           // scroll only this column, never the page
       scrollSensitivity: 60,
       scrollSpeed: 10,
-      bubbleScroll: true,
+      bubbleScroll: false,   // don't bubble up to page-level scroll containers
+      onStart: () => { document.body.style.overflow = 'hidden'; },
       onEnd: async (evt) => {
+        document.body.style.overflow = '';
         const cardEl = evt.item;
         const cardId = cardEl.dataset.cardId;
         const sourceColumnId = cardEl.dataset.columnId;
@@ -223,8 +232,14 @@ function setupBoardEvents() {
         const targetColumnId = targetColEl.dataset.columnId;
 
         if (sourceColumnId === targetColumnId) {
-          // Same column reorder — just move
-          await moveCardToColumn(cardId, targetColumnId, null, []);
+          // Same column reorder — save positions without touching history
+          const cardIds = [...targetColEl.querySelectorAll('.board-card[data-card-id]')].map(el => el.dataset.cardId);
+          try {
+            await apiFetch('/api/cards/reorder', {
+              method: 'POST',
+              body: JSON.stringify({ column_id: targetColumnId, card_ids: cardIds }),
+            });
+          } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
           return;
         }
 
@@ -280,8 +295,7 @@ async function executeDrop(cardId, sourceColumnId, targetColEl) {
   const targetGroupOrder = parseInt(targetColEl.dataset.groupOrder);
 
   if (sourceColumnId === targetColumnId) {
-    await moveCardToColumn(cardId, targetColumnId, null, []);
-    return;
+    return; // handled in onEnd already
   }
 
   const sourceCol = document.querySelector(`[id="col-${sourceColumnId}"]`);

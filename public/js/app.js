@@ -132,6 +132,7 @@ function handleRoute() {
   const [page, ...rest] = hash.split('/');
 
   document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
+  document.body.classList.toggle('board-active', page === 'board');
   document.querySelectorAll('.sidebar-item').forEach(item => item.classList.remove('active'));
 
   const pageEl = document.getElementById(`page-${page}`);
