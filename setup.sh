@@ -120,9 +120,9 @@ echo "✓ Abhängigkeiten installiert"
 
 # ── Verzeichnisse anlegen und Berechtigungen setzen ─────────────────────────
 mkdir -p "$APP_DIR/data" "$APP_DIR/uploads/branding" "$APP_DIR/uploads/attachments" "$APP_DIR/backups"
-sudo chown -R "$APP_USER:$APP_USER" "$APP_DIR/data" "$APP_DIR/uploads" "$APP_DIR/backups"
-# .env lesbar für Service-User
-sudo chown root:"$APP_USER" "$APP_DIR/.env" 2>/dev/null || true
+# App-Verzeichnis gehört dem Service-User damit Updates ohne sudo funktionieren
+sudo chown -R "$APP_USER:$APP_USER" "$APP_DIR"
+# .env nur für Service-User lesbar (kein world-read)
 sudo chmod 640 "$APP_DIR/.env" 2>/dev/null || true
 echo "✓ Verzeichnisse angelegt und Berechtigungen gesetzt"
 
@@ -141,26 +141,20 @@ EOF
 else
   echo "✓ .env vorhanden"
 fi
-sudo chown root:"$APP_USER" "$APP_DIR/.env" 2>/dev/null || true
-sudo chmod 640 "$APP_DIR/.env" 2>/dev/null || true
-
 # ── Datenbank initialisieren ────────────────────────────────────────────────
 echo "▸ Datenbank initialisieren..."
-node -e "require('./src/db/database.js')" && echo "✓ Datenbank bereit"
-sudo chown "$APP_USER:$APP_USER" "$APP_DIR/data/database.sqlite" 2>/dev/null || true
-# update.log muss existieren damit ProtectSystem=strict/ReadWritePaths greift
+# Als Service-User ausführen damit Datei die richtige Eigentümerschaft bekommt
+sudo -u "$APP_USER" node -e "require('./src/db/database.js')" && echo "✓ Datenbank bereit"
+# update.log muss existieren damit ReadWritePaths greift
 touch "$APP_DIR/update.log"
 sudo chown "$APP_USER:$APP_USER" "$APP_DIR/update.log"
 
-# ── Sudo-Regel für App-Updates (git pull + npm install ohne Passwort) ────────
-SUDOERS_FILE="/etc/sudoers.d/${APP_NAME}"
-sudo tee "$SUDOERS_FILE" > /dev/null << EOF
-# Erlaubt dem $APP_USER-Service git pull und npm install für App-Updates
-$APP_USER ALL=(root) NOPASSWD: /usr/bin/git -C ${APP_DIR} pull origin main
-$APP_USER ALL=(root) NOPASSWD: /usr/bin/npm install --production
-EOF
-sudo chmod 440 "$SUDOERS_FILE"
-echo "✓ Sudo-Regel für App-Updates eingerichtet"
+# ── rsync prüfen / installieren (für Updates benötigt) ──────────────────────
+if ! command -v rsync &>/dev/null; then
+  echo "▸ rsync wird installiert..."
+  sudo apt-get install -y rsync -qq
+fi
+echo "✓ rsync verfügbar"
 
 # ── Systemd-Service ─────────────────────────────────────────────────────────
 if [[ "${AUTOSTART^^}" == "Y" ]]; then

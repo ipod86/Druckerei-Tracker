@@ -269,39 +269,58 @@ router.get('/sysinfo', requireAdmin, (req, res) => {
   });
 });
 
-// POST /update - pull latest from git and restart
+// POST /update - download ZIP from GitHub and restart
 router.post('/update', requireAdmin, async (req, res) => {
-  const { exec } = require('child_process');
+  const { execSync, spawn } = require('child_process');
+  const fsSync = require('fs');
   const appDir = path.resolve(__dirname, '../..');
   const logFile = path.join(appDir, 'update.log');
 
   res.json({ success: true, message: 'Update wird im Hintergrund ausgeführt...' });
 
-  const timestamp = new Date().toISOString();
-  const logStream = require('fs').createWriteStream(logFile, { flags: 'a' });
-  logStream.write(`\n\n=== Update gestartet: ${timestamp} ===\n`);
+  const log = (msg) => {
+    fsSync.appendFileSync(logFile, msg + '\n');
+  };
 
-  exec(`sudo /usr/bin/git -C "${appDir}" pull origin main 2>&1 && sudo /usr/bin/npm install --production --prefix "${appDir}" 2>&1`, (err, stdout, stderr) => {
-    const output = stdout + (stderr || '');
-    logStream.write(output + '\n');
-    if (err) {
-      logStream.write(`FEHLER: ${err.message}\n`);
-      logStream.end();
-      return;
-    }
-    logStream.write('=== Update erfolgreich, starte neu... ===\n');
-    logStream.end();
-    // Restart: spawn detached child and exit current process
-    const { spawn } = require('child_process');
-    const child = spawn(process.execPath, [require('path').join(appDir, 'src/server.js')], {
-      detached: true,
-      stdio: ['ignore', require('fs').openSync(require('path').join(appDir, 'update.log'), 'a'), require('fs').openSync(require('path').join(appDir, 'update.log'), 'a')],
-      cwd: appDir,
-      env: process.env,
-    });
-    child.unref();
-    setTimeout(() => process.exit(0), 500);
+  log(`\n\n=== Update gestartet: ${new Date().toISOString()} ===`);
+
+  const tmpZip  = `/tmp/druckerei-update-${process.pid}.zip`;
+  const tmpDir  = `/tmp/druckerei-update-${process.pid}`;
+  const zipUrl  = 'https://github.com/ipod86/Druckerei-Tracker/archive/refs/heads/main.zip';
+
+  try {
+    log('▸ Herunterladen...');
+    execSync(`wget -q -O "${tmpZip}" "${zipUrl}"`, { timeout: 60000 });
+
+    log('▸ Entpacken...');
+    execSync(`mkdir -p "${tmpDir}" && unzip -q "${tmpZip}" -d "${tmpDir}"`, { timeout: 30000 });
+
+    log('▸ Dateien kopieren...');
+    // Copy everything except persistent dirs
+    execSync(
+      `rsync -a --exclude=data/ --exclude=uploads/ --exclude=backups/ --exclude=.env --exclude=update.log --exclude=node_modules/ "${tmpDir}/Druckerei-Tracker-main/" "${appDir}/"`,
+      { timeout: 30000 }
+    );
+
+    log('▸ Abhängigkeiten installieren...');
+    execSync(`npm install --omit=dev --prefix "${appDir}" 2>&1`, { timeout: 120000 });
+
+    log('=== Update erfolgreich, starte neu... ===');
+  } catch (e) {
+    log(`FEHLER: ${e.message}`);
+  } finally {
+    try { execSync(`rm -rf "${tmpZip}" "${tmpDir}"`); } catch(_) {}
+  }
+
+  // Restart regardless so the new code loads (or old code keeps running on error)
+  const child = spawn(process.execPath, [path.join(appDir, 'src/server.js')], {
+    detached: true,
+    stdio: ['ignore', fsSync.openSync(logFile, 'a'), fsSync.openSync(logFile, 'a')],
+    cwd: appDir,
+    env: process.env,
   });
+  child.unref();
+  setTimeout(() => process.exit(0), 500);
 });
 
 // GET /update-log
