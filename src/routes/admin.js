@@ -133,7 +133,7 @@ router.post('/backup/restore', requireAdmin, (req, res) => {
     cwd: appDir, env: process.env,
   });
   child.unref();
-  setTimeout(() => process.exit(0), 500);
+  setTimeout(() => process.exit(1), 500);
 });
 
 // ---- Checklist Templates ----
@@ -323,7 +323,7 @@ router.post('/update', requireAdmin, async (req, res) => {
   if (success) {
     log('▸ Neustart...');
     // Let systemd restart the service (Restart=always), or fall back to self-restart
-    setTimeout(() => process.exit(0), 500);
+    setTimeout(() => process.exit(1), 500);
   }
 });
 
