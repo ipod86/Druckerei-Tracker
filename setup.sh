@@ -31,14 +31,9 @@ if systemctl list-units --all --quiet "$APP_NAME.service" 2>/dev/null | grep -q 
   echo "↺ Laufende Instanz wird gestoppt..."
   sudo systemctl stop "$APP_NAME" 2>/dev/null || true
 fi
-# Verbliebene Node-Prozesse auf dem App-Port beenden
-_ENV_FILE="$APP_DIR/.env"
-if [ -f "$_ENV_FILE" ]; then
-  _PORT=$(grep '^PORT=' "$_ENV_FILE" | cut -d= -f2)
-  if [ -n "$_PORT" ]; then
-    fuser -k "${_PORT}/tcp" 2>/dev/null || true
-  fi
-fi
+# Verbliebene Node-Prozesse des App-Servers beenden
+pkill -f "node.*${APP_DIR}/src/server.js" 2>/dev/null || true
+sleep 1
 
 # ── Dedizierter System-User ─────────────────────────────────────────────────
 APP_USER="druckerei"
@@ -86,7 +81,6 @@ MISSING_PKGS=""
 command -v make &>/dev/null   || MISSING_PKGS="$MISSING_PKGS make"
 command -v g++  &>/dev/null   || MISSING_PKGS="$MISSING_PKGS g++"
 command -v python3 &>/dev/null || MISSING_PKGS="$MISSING_PKGS python3"
-command -v fuser &>/dev/null  || MISSING_PKGS="$MISSING_PKGS psmisc"
 if [ -n "$MISSING_PKGS" ]; then
   echo "  → Installiere:$MISSING_PKGS"
   sudo apt-get install -y $MISSING_PKGS -qq
