@@ -123,9 +123,14 @@ SESSION_TIMEOUT_MINUTES=60
 EOF
   echo "✓ .env erstellt (Session-Secret automatisch generiert)"
 else
-  # Port in bestehender .env aktualisieren
-  sed -i "s/^PORT=.*/PORT=${PORT}/" "$APP_DIR/.env"
-  echo "✓ .env vorhanden (Port aktualisiert)"
+  # Port nur aktualisieren wenn interaktiv eingegeben (nicht Default ohne Terminal)
+  if [ -t 0 ]; then
+    sed -i "s/^PORT=.*/PORT=${PORT}/" "$APP_DIR/.env"
+    echo "✓ .env vorhanden (Port aktualisiert)"
+  else
+    PORT=$(grep '^PORT=' "$APP_DIR/.env" | cut -d= -f2 || echo "3000")
+    echo "✓ .env vorhanden (Port beibehalten: $PORT)"
+  fi
 fi
 sudo chown root:"$APP_USER" "$APP_DIR/.env" 2>/dev/null || true
 sudo chmod 640 "$APP_DIR/.env" 2>/dev/null || true
@@ -134,6 +139,9 @@ sudo chmod 640 "$APP_DIR/.env" 2>/dev/null || true
 echo "▸ Datenbank initialisieren..."
 node -e "require('./src/db/database.js')" && echo "✓ Datenbank bereit"
 sudo chown "$APP_USER:$APP_USER" "$APP_DIR/data/database.sqlite" 2>/dev/null || true
+# update.log muss existieren damit ProtectSystem=strict/ReadWritePaths greift
+touch "$APP_DIR/update.log"
+sudo chown "$APP_USER:$APP_USER" "$APP_DIR/update.log"
 
 # ── Sudo-Regel für App-Updates (git pull + npm install ohne Passwort) ────────
 SUDOERS_FILE="/etc/sudoers.d/${APP_NAME}"
