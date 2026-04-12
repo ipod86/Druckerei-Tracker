@@ -43,19 +43,26 @@ else
 fi
 
 # ── Port abfragen ───────────────────────────────────────────────────────────
-while true; do
-  read -rp "Port [3000]: " PORT
-  PORT="${PORT:-3000}"
-  if ss -tuln 2>/dev/null | grep -q ":${PORT} "; then
-    echo "⚠  Port $PORT ist belegt – bitte anderen wählen."
-  else
-    echo "✓ Port $PORT ist frei."
-    break
-  fi
-done
+if [ -t 0 ]; then
+  while true; do
+    read -rp "Port [3000]: " PORT
+    PORT="${PORT:-3000}"
+    if ss -tuln 2>/dev/null | grep -q ":${PORT} "; then
+      echo "⚠  Port $PORT ist belegt – bitte anderen wählen."
+    else
+      echo "✓ Port $PORT ist frei."
+      break
+    fi
+  done
+else
+  PORT="3000"
+  echo "✓ Port $PORT (Standard, kein Terminal)"
+fi
 
 # ── Autostart abfragen ──────────────────────────────────────────────────────
-read -rp "Autostart beim Systemstart einrichten? [Y/n]: " AUTOSTART
+if [ -t 0 ]; then
+  read -rp "Autostart beim Systemstart einrichten? [Y/n]: " AUTOSTART
+fi
 AUTOSTART="${AUTOSTART:-Y}"
 
 # ── Build-Abhängigkeiten (für better-sqlite3 Kompilierung) ──────────────────

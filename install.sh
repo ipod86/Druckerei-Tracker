@@ -56,4 +56,10 @@ rm -rf "$TMP_ZIP" "$TMP_DIR"
 echo "✓ Temporäre Dateien gelöscht"
 
 # ── Setup ausführen ──────────────────────────────────────────────────────────
-bash "$TARGET/setup.sh"
+# /dev/tty stellt sicher dass interaktive Prompts funktionieren auch wenn
+# das Script via "wget | bash" gepipt wird (stdin wäre sonst EOF)
+if [ -e /dev/tty ]; then
+  bash "$TARGET/setup.sh" < /dev/tty
+else
+  bash "$TARGET/setup.sh"
+fi
