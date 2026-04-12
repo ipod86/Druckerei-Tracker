@@ -270,61 +270,53 @@ router.get('/sysinfo', requireAdmin, (req, res) => {
 });
 
 // POST /update - download ZIP from GitHub and restart
-router.post('/update', requireAdmin, async (req, res) => {
-  const { execSync } = require('child_process');
+router.post('/update', requireAdmin, (req, res) => {
+  const { spawn } = require('child_process');
   const fsSync = require('fs');
   const appDir = path.resolve(__dirname, '../..');
   const logFile = path.join(appDir, 'update.log');
+  const zipUrl  = 'https://github.com/ipod86/Druckerei-Tracker/archive/refs/heads/main.zip';
+  const tmpZip  = `/tmp/druckerei-update-${process.pid}.zip`;
+  const tmpDir  = `/tmp/druckerei-update-${process.pid}`;
 
   res.json({ success: true, message: 'Update wird im Hintergrund ausgeführt...' });
 
-  const log = (msg) => {
-    try { fsSync.appendFileSync(logFile, msg + '\n'); } catch(_) {}
-  };
-
+  const log = (msg) => { try { fsSync.appendFileSync(logFile, msg + '\n'); } catch(_) {} };
   log(`\n\n=== Update gestartet: ${new Date().toISOString()} ===`);
 
-  const tmpZip = `/tmp/druckerei-update-${process.pid}.zip`;
-  const tmpDir = `/tmp/druckerei-update-${process.pid}`;
-  const zipUrl = 'https://github.com/ipod86/Druckerei-Tracker/archive/refs/heads/main.zip';
+  // Hintergrund-Script: Node bleibt reaktionsfähig für Log-Polls
+  const script = `
+set -e
+command -v rsync >/dev/null || apt-get install -y rsync -qq
+echo "▸ Herunterladen..." >> "${logFile}"
+wget -q -O "${tmpZip}" "${zipUrl}"
+echo "▸ Entpacken..." >> "${logFile}"
+mkdir -p "${tmpDir}" && unzip -q "${tmpZip}" -d "${tmpDir}"
+echo "▸ Dateien kopieren..." >> "${logFile}"
+rsync -a --delete --exclude=data/ --exclude=uploads/ --exclude=backups/ --exclude=.env --exclude=update.log --exclude=node_modules/ "${tmpDir}/Druckerei-Tracker-main/" "${appDir}/"
+echo "▸ Abhängigkeiten installieren..." >> "${logFile}"
+cd "${appDir}" && npm install --omit=dev >> "${logFile}" 2>&1
+rm -rf "${tmpZip}" "${tmpDir}"
+echo "=== Update erfolgreich ===" >> "${logFile}"
+`;
 
-  let success = false;
-  try {
-    // Ensure rsync is available
-    try { execSync('which rsync', { timeout: 5000 }); }
-    catch(_) {
-      log('▸ rsync installieren...');
-      execSync('apt-get install -y rsync -qq', { timeout: 60000 });
-    }
+  const child = spawn('bash', ['-c', script], { detached: true, stdio: 'ignore' });
+  child.unref();
 
-    log('▸ Herunterladen...');
-    execSync(`wget -q -O "${tmpZip}" "${zipUrl}"`, { timeout: 60000 });
-
-    log('▸ Entpacken...');
-    execSync(`mkdir -p "${tmpDir}" && unzip -q "${tmpZip}" -d "${tmpDir}"`, { timeout: 30000 });
-
-    log('▸ Dateien kopieren...');
-    execSync(
-      `rsync -a --delete --exclude=data/ --exclude=uploads/ --exclude=backups/ --exclude=.env --exclude=update.log --exclude=node_modules/ "${tmpDir}/Druckerei-Tracker-main/" "${appDir}/"`,
-      { timeout: 30000 }
-    );
-
-    log('▸ Abhängigkeiten installieren...');
-    execSync(`npm install --omit=dev 2>&1`, { cwd: appDir, timeout: 120000 });
-
-    log('=== Update erfolgreich ===');
-    success = true;
-  } catch (e) {
-    log(`FEHLER: ${e.stderr ? e.stderr.toString() : e.message}`);
-  } finally {
-    try { execSync(`rm -rf "${tmpZip}" "${tmpDir}"`); } catch(_) {}
-  }
-
-  if (success) {
-    log('▸ Neustart...');
-    // Let systemd restart the service (Restart=always), or fall back to self-restart
-    setTimeout(() => process.exit(1), 500);
-  }
+  // Warte auf "=== Update erfolgreich ===" dann neu starten
+  let waited = 0;
+  const check = setInterval(() => {
+    waited += 2000;
+    try {
+      const content = fsSync.readFileSync(logFile, 'utf8');
+      if (content.includes('=== Update erfolgreich ===')) {
+        clearInterval(check);
+        log('▸ Neustart...');
+        setTimeout(() => process.exit(1), 500);
+      }
+    } catch(_) {}
+    if (waited > 180000) { clearInterval(check); log('FEHLER: Timeout'); }
+  }, 2000);
 });
 
 // GET /update-log
