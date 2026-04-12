@@ -27,9 +27,17 @@ fi
 echo "✓ Node.js $(node --version) gefunden"
 
 # ── Laufende Instanz stoppen ────────────────────────────────────────────────
-if systemctl is-active --quiet "$APP_NAME" 2>/dev/null; then
+if systemctl list-units --all --quiet "$APP_NAME.service" 2>/dev/null | grep -q "$APP_NAME"; then
   echo "↺ Laufende Instanz wird gestoppt..."
-  sudo systemctl stop "$APP_NAME"
+  sudo systemctl stop "$APP_NAME" 2>/dev/null || true
+fi
+# Verbliebene Node-Prozesse auf dem App-Port beenden
+_ENV_FILE="$APP_DIR/.env"
+if [ -f "$_ENV_FILE" ]; then
+  _PORT=$(grep '^PORT=' "$_ENV_FILE" | cut -d= -f2)
+  if [ -n "$_PORT" ]; then
+    fuser -k "${_PORT}/tcp" 2>/dev/null || true
+  fi
 fi
 
 # ── Dedizierter System-User ─────────────────────────────────────────────────
@@ -78,6 +86,7 @@ MISSING_PKGS=""
 command -v make &>/dev/null   || MISSING_PKGS="$MISSING_PKGS make"
 command -v g++  &>/dev/null   || MISSING_PKGS="$MISSING_PKGS g++"
 command -v python3 &>/dev/null || MISSING_PKGS="$MISSING_PKGS python3"
+command -v fuser &>/dev/null  || MISSING_PKGS="$MISSING_PKGS psmisc"
 if [ -n "$MISSING_PKGS" ]; then
   echo "  → Installiere:$MISSING_PKGS"
   sudo apt-get install -y $MISSING_PKGS -qq
