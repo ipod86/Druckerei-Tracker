@@ -102,6 +102,9 @@ db.transaction(() => {
 })();
 db.pragma('foreign_keys = ON');
 
+// Add card_type to cards if missing
+try { db.exec("ALTER TABLE cards ADD COLUMN card_type TEXT DEFAULT 'card'"); } catch (_) {}
+
 // Add time_limit_days and escalation_time to columns if missing
 try { db.exec('ALTER TABLE columns ADD COLUMN time_limit_days INTEGER DEFAULT NULL'); } catch (_) {}
 try { db.exec('ALTER TABLE columns ADD COLUMN escalation_time TEXT DEFAULT NULL'); } catch (_) {}

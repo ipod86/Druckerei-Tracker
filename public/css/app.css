@@ -663,6 +663,38 @@ body {
   -webkit-box-orient: vertical;
 }
 
+/* Column divider/section header */
+.board-divider {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 8px;
+  margin-bottom: 4px;
+  background: transparent;
+  border-bottom: 2px solid var(--border);
+  cursor: grab;
+  user-select: none;
+}
+.board-divider-text {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--secondary);
+}
+.board-divider-delete {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 2px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.board-divider:hover .board-divider-delete { opacity: 1; }
+
 /* ===== CARD DETAIL MODAL ===== */
 .modal {
   position: fixed;
@@ -1437,7 +1469,12 @@ tr:hover td { background: #fafafa; }
 
   /* Admin */
   .admin-layout { grid-template-columns: 1fr; }
-  .admin-sidebar { border-right: none; border-bottom: 1px solid var(--border); }
+  .admin-sidebar {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    max-height: 45vh;
+    overflow-y: auto;
+  }
 
   /* Misc */
   .customer-grid { grid-template-columns: 1fr; }

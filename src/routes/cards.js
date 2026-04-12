@@ -234,16 +234,17 @@ router.get('/:id', requireAuth, (req, res) => {
 
 // POST / - create card
 router.post('/', requireEmployee, (req, res) => {
-  const { title, order_number, description, column_id, location_id, customer_id, customer_email, due_date, labels } = req.body;
+  const { title, order_number, description, column_id, location_id, customer_id, customer_email, due_date, labels, card_type } = req.body;
   if (!title || !column_id) return res.status(400).json({ error: 'title and column_id required' });
 
   const maxPos = db.prepare('SELECT MAX(position) as mx FROM cards WHERE column_id = ? AND archived = 0').get(column_id);
   const position = (maxPos.mx || 0) + 1000;
+  const type = card_type === 'divider' ? 'divider' : 'card';
 
   const result = db.prepare(`
-    INSERT INTO cards (title, order_number, description, column_id, location_id, customer_id, customer_email, due_date, created_by, position)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(title, order_number || null, description || null, column_id, location_id || null, customer_id || null, customer_email || null, due_date || null, req.user.id, position);
+    INSERT INTO cards (title, order_number, description, column_id, location_id, customer_id, customer_email, due_date, created_by, position, card_type)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(title, order_number || null, description || null, column_id, location_id || null, customer_id || null, customer_email || null, due_date || null, req.user.id, position, type);
 
   const cardId = result.lastInsertRowid;
 
@@ -300,14 +301,18 @@ router.put('/:id', requireEmployee, (req, res) => {
   res.json(updated);
 });
 
-// DELETE /:id - soft delete
+// DELETE /:id - hard delete for dividers, soft delete (archive) for cards
 router.delete('/:id', requireEmployee, (req, res) => {
   const card = db.prepare('SELECT * FROM cards WHERE id = ?').get(req.params.id);
   if (!card) return res.status(404).json({ error: 'Card not found' });
 
-  db.prepare('UPDATE cards SET archived = 1, archived_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.params.id);
-  db.prepare('INSERT INTO card_history (card_id, action_type, user_id, details) VALUES (?, ?, ?, ?)')
-    .run(req.params.id, 'archived', req.user.id, JSON.stringify({}));
+  if (card.card_type === 'divider') {
+    db.prepare('DELETE FROM cards WHERE id = ?').run(req.params.id);
+  } else {
+    db.prepare('UPDATE cards SET archived = 1, archived_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.params.id);
+    db.prepare('INSERT INTO card_history (card_id, action_type, user_id, details) VALUES (?, ?, ?, ?)')
+      .run(req.params.id, 'archived', req.user.id, JSON.stringify({}));
+  }
   res.json({ success: true });
 });
 

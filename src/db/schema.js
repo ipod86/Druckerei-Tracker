@@ -86,7 +86,8 @@ function setupSchema(db) {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       archived INTEGER DEFAULT 0,
       archived_at DATETIME,
-      position REAL DEFAULT 0
+      position REAL DEFAULT 0,
+      card_type TEXT DEFAULT 'card'
     );
 
     CREATE TABLE IF NOT EXISTS card_labels (

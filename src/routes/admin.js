@@ -137,6 +137,106 @@ router.delete('/checklist-templates/:id', requireAdmin, (req, res) => {
   res.json({ success: true });
 });
 
+// GET /sysinfo
+router.get('/sysinfo', requireAdmin, (req, res) => {
+  const appPkg = (() => {
+    try { return JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '../../package.json'), 'utf8')); } catch(e) { return {}; }
+  })();
+
+  const cardCount = db.prepare('SELECT COUNT(*) as cnt FROM cards WHERE archived = 0').get().cnt;
+  const archivedCount = db.prepare('SELECT COUNT(*) as cnt FROM cards WHERE archived = 1').get().cnt;
+  const userCount = db.prepare('SELECT COUNT(*) as cnt FROM users WHERE active = 1').get().cnt;
+  const customerCount = db.prepare('SELECT COUNT(*) as cnt FROM customers').get().cnt;
+
+  const dbPath = path.resolve(process.env.DB_PATH || './data/database.sqlite');
+  let dbSize = '—';
+  try { dbSize = (require('fs').statSync(dbPath).size / 1024).toFixed(1) + ' KB'; } catch(e) {}
+
+  const uploadsDir = path.resolve(process.env.UPLOAD_PATH || './uploads');
+  let uploadSize = '—';
+  try {
+    const { execSync } = require('child_process');
+    const result = execSync(`du -sh "${uploadsDir}" 2>/dev/null || echo "0"`, { encoding: 'utf8' });
+    uploadSize = result.split('\t')[0] || '—';
+  } catch(e) {}
+
+  res.json({
+    version: appPkg.version || '1.0.0',
+    node_version: process.version,
+    platform: process.platform,
+    uptime_seconds: Math.floor(process.uptime()),
+    memory_mb: (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(1),
+    db_size: dbSize,
+    upload_size: uploadSize,
+    cards_active: cardCount,
+    cards_archived: archivedCount,
+    users_active: userCount,
+    customers: customerCount,
+  });
+});
+
+// POST /update - pull latest from git and restart
+router.post('/update', requireAdmin, async (req, res) => {
+  const { exec } = require('child_process');
+  const appDir = path.resolve(__dirname, '../..');
+  const logFile = path.join(appDir, 'update.log');
+
+  res.json({ success: true, message: 'Update wird im Hintergrund ausgeführt...' });
+
+  const timestamp = new Date().toISOString();
+  const logStream = require('fs').createWriteStream(logFile, { flags: 'a' });
+  logStream.write(`\n\n=== Update gestartet: ${timestamp} ===\n`);
+
+  exec(`cd "${appDir}" && git pull origin main 2>&1 && npm install --production 2>&1`, (err, stdout, stderr) => {
+    const output = stdout + (stderr || '');
+    logStream.write(output + '\n');
+    if (err) {
+      logStream.write(`FEHLER: ${err.message}\n`);
+      logStream.end();
+      return;
+    }
+    logStream.write('=== Update erfolgreich, starte neu... ===\n');
+    logStream.end();
+    // Graceful restart: exit and let process manager (pm2/systemd) restart
+    setTimeout(() => process.exit(0), 500);
+  });
+});
+
+// GET /update-log
+router.get('/update-log', requireAdmin, (req, res) => {
+  const appDir = path.resolve(__dirname, '../..');
+  const logFile = path.join(appDir, 'update.log');
+  try {
+    const content = require('fs').readFileSync(logFile, 'utf8');
+    res.json({ log: content.slice(-10000) }); // last 10KB
+  } catch(e) {
+    res.json({ log: 'Kein Update-Log vorhanden.' });
+  }
+});
+
+// GET /latest-version - check GitHub for latest release
+router.get('/latest-version', requireAdmin, async (req, res) => {
+  try {
+    const https = require('https');
+    const data = await new Promise((resolve, reject) => {
+      const req2 = https.get('https://api.github.com/repos/ipod86/Druckerei-Tracker/releases/latest', {
+        headers: { 'User-Agent': 'druckerei-tracker' }
+      }, (r) => {
+        let body = '';
+        r.on('data', d => body += d);
+        r.on('end', () => {
+          try { resolve(JSON.parse(body)); } catch(e) { reject(e); }
+        });
+      });
+      req2.on('error', reject);
+      req2.setTimeout(5000, () => { req2.destroy(); reject(new Error('timeout')); });
+    });
+    res.json({ tag_name: data.tag_name || null, html_url: data.html_url || null });
+  } catch(e) {
+    res.json({ tag_name: null, error: e.message });
+  }
+});
+
 // POST /email/test
 router.post('/email/test', requireAdmin, async (req, res) => {
   try {

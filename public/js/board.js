@@ -102,7 +102,10 @@ function renderBoard() {
       html += `</div>`;
 
       if (currentUser && currentUser.role !== 'readonly') {
-        html += `<button class="add-card-btn" data-column-id="${col.id}" data-column-name="${escapeHtml(col.name)}">+ Karte hinzufügen</button>`;
+        html += `<div style="display:flex;gap:4px">
+          <button class="add-card-btn" style="flex:1" data-column-id="${col.id}" data-column-name="${escapeHtml(col.name)}">+ Karte hinzufügen</button>
+          <button class="add-divider-btn" data-column-id="${col.id}" title="Überschrift hinzufügen" style="padding:6px 8px;background:transparent;border:1px dashed var(--border);border-radius:var(--radius);color:var(--text-muted);cursor:pointer;font-size:14px">≡</button>
+        </div>`;
       }
 
       html += `</div>`;
@@ -119,6 +122,17 @@ function renderBoard() {
 }
 
 function renderCardMini(card) {
+  // Divider cards render as section headers
+  if (card.card_type === 'divider') {
+    return `
+      <div class="board-divider"
+           data-card-id="${card.id}"
+           data-column-id="${card.column_id}">
+        <span class="board-divider-text">${escapeHtml(card.title)}</span>
+        <button class="board-divider-delete" data-card-id="${card.id}" title="Überschrift löschen">&times;</button>
+      </div>`;
+  }
+
   const isOverdueCard = isOverdue(card);
   const labels = card.labels || [];
   const visibleLabels = labels.slice(0, 3);
@@ -228,6 +242,33 @@ function setupBoardEvents() {
   document.querySelectorAll('.add-card-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       showCreateCardModal(btn.dataset.columnId, btn.dataset.columnName);
+    });
+  });
+
+  // Add divider buttons
+  document.querySelectorAll('.add-divider-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const name = prompt('Überschrift:');
+      if (!name || !name.trim()) return;
+      try {
+        await apiFetch('/api/cards', {
+          method: 'POST',
+          body: JSON.stringify({ title: name.trim(), column_id: parseInt(btn.dataset.columnId), card_type: 'divider' }),
+        });
+        fetchAndRenderBoard();
+      } catch(e) { showToast('Fehler: ' + e.message, 'error'); }
+    });
+  });
+
+  // Delete divider buttons
+  document.querySelectorAll('.board-divider-delete').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!await showConfirm('Überschrift löschen', 'Diese Überschrift löschen?')) return;
+      try {
+        await apiFetch(`/api/cards/${btn.dataset.cardId}`, { method: 'DELETE' });
+        fetchAndRenderBoard();
+      } catch(e) { showToast('Fehler: ' + e.message, 'error'); }
     });
   });
 }

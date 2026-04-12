@@ -29,6 +29,7 @@ window.loadAdmin = function() {
         <div class="admin-sidebar-item" data-section="branding">CI / Branding</div>
         <div class="admin-sidebar-item" data-section="backup">Backup</div>
         <div class="admin-sidebar-item" data-section="archive-settings">Archiv-Einstellungen</div>
+        <div class="admin-sidebar-item" data-section="sysinfo">Systeminformationen</div>
       </div>
       <div class="admin-content" id="admin-content">
         <div class="loading"><div class="spinner"></div></div>
@@ -69,6 +70,7 @@ async function loadAdminSection(section) {
       case 'branding': await loadBranding(content); break;
       case 'backup': await loadBackup(content); break;
       case 'archive-settings': await loadArchiveSettings(content); break;
+      case 'sysinfo': await loadSysinfo(content); break;
       default: content.innerHTML = '<div class="empty-state">Unbekannter Bereich</div>';
     }
   } catch (e) {
@@ -1374,5 +1376,110 @@ function showFormModal(title, formHtml, onSave) {
     } catch (e) {
       showToast('Fehler: ' + e.message, 'error');
     }
+  });
+}
+
+// ===== Sysinfo =====
+async function loadSysinfo(content) {
+  const info = await apiFetch('/api/admin/sysinfo');
+
+  function formatUptime(secs) {
+    const d = Math.floor(secs / 86400);
+    const h = Math.floor((secs % 86400) / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    return [d > 0 ? `${d}T` : '', h > 0 ? `${h}h` : '', `${m}min`].filter(Boolean).join(' ');
+  }
+
+  content.innerHTML = `
+    <div class="admin-section">
+      <div class="admin-section-title">Systeminformationen</div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:24px">
+        ${[
+          ['Version', `v${info.version}`],
+          ['Node.js', info.node_version],
+          ['Laufzeit', formatUptime(info.uptime_seconds)],
+          ['Speicher', `${info.memory_mb} MB`],
+          ['Datenbank', info.db_size],
+          ['Uploads', info.upload_size],
+          ['Aktive Karten', info.cards_active],
+          ['Archivierte Karten', info.cards_archived],
+          ['Benutzer', info.users_active],
+          ['Kunden', info.customers],
+        ].map(([label, val]) => `
+          <div style="background:var(--bg);border-radius:var(--radius);padding:12px">
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">${label}</div>
+            <div style="font-size:16px;font-weight:700">${escapeHtml(String(val))}</div>
+          </div>
+        `).join('')}
+      </div>
+
+      <div class="admin-section-title">Update</div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+        <div>
+          <span style="font-size:13px">Installierte Version: <strong>v${escapeHtml(info.version)}</strong></span>
+          <span id="latest-version-badge" style="margin-left:12px;font-size:12px;color:var(--text-muted)">Prüfe GitHub...</span>
+        </div>
+        <button class="btn btn-secondary btn-sm" id="check-update-btn">Auf Updates prüfen</button>
+        <button class="btn btn-primary btn-sm" id="do-update-btn" style="display:none">Update installieren</button>
+      </div>
+      <pre id="update-log-box" style="background:#1a1a1a;color:#ddd;padding:12px;border-radius:var(--radius);font-size:11px;max-height:300px;overflow-y:auto;white-space:pre-wrap;display:none"></pre>
+    </div>
+  `;
+
+  // Load latest version from GitHub
+  async function checkVersion() {
+    try {
+      const vdata = await apiFetch('/api/admin/latest-version');
+      const badge = document.getElementById('latest-version-badge');
+      if (!badge) return;
+      if (vdata.tag_name) {
+        const current = 'v' + info.version;
+        if (vdata.tag_name === current) {
+          badge.textContent = `Aktuell (${vdata.tag_name})`;
+          badge.style.color = 'var(--success)';
+        } else {
+          badge.textContent = `Neue Version verfügbar: ${vdata.tag_name}`;
+          badge.style.color = 'var(--warning)';
+          const btn = document.getElementById('do-update-btn');
+          if (btn) btn.style.display = '';
+        }
+      } else {
+        badge.textContent = 'GitHub nicht erreichbar';
+      }
+    } catch(e) {
+      const badge = document.getElementById('latest-version-badge');
+      if (badge) badge.textContent = 'Prüfung fehlgeschlagen';
+    }
+  }
+
+  checkVersion();
+
+  document.getElementById('check-update-btn').addEventListener('click', () => {
+    document.getElementById('latest-version-badge').textContent = 'Prüfe...';
+    checkVersion();
+  });
+
+  document.getElementById('do-update-btn').addEventListener('click', async () => {
+    if (!await showConfirm('Update installieren', 'Das Tool wird aktualisiert und kurz neu gestartet. Fortfahren?')) return;
+    try {
+      await apiFetch('/api/admin/update', { method: 'POST' });
+      const logBox = document.getElementById('update-log-box');
+      logBox.style.display = '';
+      logBox.textContent = 'Update läuft...';
+      showToast('Update gestartet', 'info');
+
+      // Poll update log
+      let polls = 0;
+      const interval = setInterval(async () => {
+        try {
+          const logData = await apiFetch('/api/admin/update-log');
+          logBox.textContent = logData.log || '';
+          logBox.scrollTop = logBox.scrollHeight;
+          polls++;
+          if (polls > 30) clearInterval(interval);
+        } catch(e) { clearInterval(interval); }
+      }, 2000);
+    } catch(e) { showToast('Fehler: ' + e.message, 'error'); }
   });
 }
