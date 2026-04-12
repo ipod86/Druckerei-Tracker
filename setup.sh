@@ -180,9 +180,8 @@ RestartSec=5
 EnvironmentFile=${APP_DIR}/.env
 StandardOutput=journal
 StandardError=journal
-NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=${APP_DIR}/data ${APP_DIR}/uploads ${APP_DIR}/backups ${APP_DIR}/update.log
+ReadWritePaths=${APP_DIR}
 
 [Install]
 WantedBy=multi-user.target
