@@ -16,12 +16,13 @@ function formatDate(str) {
 async function generateSummaryPDF(cardId) {
   const card = db.prepare(`
     SELECT ca.*, col.name as column_name, g.name as group_name,
-           cu.name as customer_name, cu.company as customer_company,
+           cu.name as customer_name, co.name as customer_company,
            u.username as created_by_name
     FROM cards ca
     JOIN columns col ON ca.column_id = col.id
     JOIN groups g ON col.group_id = g.id
     LEFT JOIN customers cu ON ca.customer_id = cu.id
+    LEFT JOIN companies co ON cu.company_id = co.id
     LEFT JOIN users u ON ca.created_by = u.id
     WHERE ca.id = ?
   `).get(cardId);
