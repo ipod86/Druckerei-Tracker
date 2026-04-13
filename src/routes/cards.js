@@ -174,7 +174,7 @@ router.get('/:id', requireAuth, (req, res) => {
   const card = db.prepare(`
     SELECT ca.*, col.name as column_name, col.group_id, col.time_limit_hours, col.time_limit_days, col.escalation_time,
            g.name as group_name, g.color as group_color, g.order_index as group_order,
-           cu.name as customer_name, cu.company as customer_company, cu.email as customer_email_addr,
+           cu.name as customer_name, co.name as customer_company, cu.email as customer_email_addr,
            l.name as location_name,
            u.username as created_by_name,
            COALESCE(
@@ -185,6 +185,7 @@ router.get('/:id', requireAuth, (req, res) => {
     JOIN columns col ON ca.column_id = col.id
     JOIN groups g ON col.group_id = g.id
     LEFT JOIN customers cu ON ca.customer_id = cu.id
+    LEFT JOIN companies co ON cu.company_id = co.id
     LEFT JOIN locations l ON ca.location_id = l.id
     LEFT JOIN users u ON ca.created_by = u.id
     WHERE ca.id = ?
