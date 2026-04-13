@@ -246,14 +246,15 @@ async function generateSummaryPDF(cardId) {
 
     // Footer with page number
     const range = doc.bufferedPageRange();
-    for (let i = range.start; i < range.start + range.count; i++) {
-      doc.switchToPage(i);
+    for (let i = 0; i < range.count; i++) {
+      doc.switchToPage(range.start + i);
+      const footerY = doc.page.height - doc.page.margins.bottom - 2;
       doc.fontSize(8).font('Helvetica').fillColor('#999999')
          .text(
-           `${appName}  -  Seite ${i - range.start + 1} von ${range.count}`,
+           `${appName}  -  Seite ${i + 1} von ${range.count}`,
            leftMargin,
-           doc.page.height - doc.page.margins.bottom + 10,
-           { width: contentWidth, align: 'right' }
+           footerY,
+           { width: contentWidth, align: 'right', lineBreak: false }
          );
     }
 
