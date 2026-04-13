@@ -62,14 +62,20 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Token wird in der Session gespeichert und als JS-lesbares Cookie gesetzt.
 // Alle state-ändernden API-Requests müssen ihn als X-CSRF-Token Header senden.
 app.use((req, res, next) => {
+  if (!req.session) return next();
+
   if (!req.session.csrfToken) {
     req.session.csrfToken = crypto.randomBytes(32).toString('hex');
   }
-  res.cookie('csrf-token', req.session.csrfToken, {
-    httpOnly: false,
-    sameSite: 'strict',
-    secure: req.secure || req.headers['x-forwarded-proto'] === 'https',
-  });
+  try {
+    res.cookie('csrf-token', req.session.csrfToken, {
+      httpOnly: false,
+      sameSite: 'strict',
+      secure: req.secure || req.headers['x-forwarded-proto'] === 'https',
+    });
+  } catch (e) {
+    console.error('[CSRF] Cookie-Fehler:', e.message);
+  }
 
   if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') {
     return next();

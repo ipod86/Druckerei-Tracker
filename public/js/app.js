@@ -7,7 +7,7 @@ let notificationPollInterval = null;
 let searchDebounceTimer = null;
 
 // ===== API Fetch Wrapper =====
-function getCsrfToken() {
+window.getCsrfToken = function() {
   const c = document.cookie.split('; ').find(r => r.startsWith('csrf-token='));
   return c ? c.split('=')[1] : '';
 }
@@ -194,7 +194,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
   try {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCsrfToken() },
       body: JSON.stringify({ username, password }),
     });
     const data = await res.json();
@@ -215,7 +215,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
 
 // ===== Logout =====
 document.getElementById('logout-btn').addEventListener('click', async () => {
-  await fetch('/api/auth/logout', { method: 'POST' });
+  await fetch('/api/auth/logout', { method: 'POST', headers: { 'X-CSRF-Token': getCsrfToken() } });
   window.currentUser = null;
   window.location.hash = '';
   showLogin();
