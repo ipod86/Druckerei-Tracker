@@ -295,7 +295,15 @@ wget -q -O "${tmpZip}" "${zipUrl}" || { echo "FEHLER: wget gescheitert" >> "${lo
 echo "▸ Entpacken..." >> "${logFile}"
 mkdir -p "${tmpDir}" && unzip -q "${tmpZip}" -d "${tmpDir}" || { echo "FEHLER: unzip gescheitert" >> "${logFile}"; exit 1; }
 echo "▸ Dateien kopieren..." >> "${logFile}"
-rsync -a --delete --exclude=data/ --exclude=uploads/ --exclude=backups/ --exclude=.env --exclude=update.log --exclude=node_modules/ "${tmpDir}/Druckerei-Tracker-main/" "${appDir}/" || { echo "FEHLER: rsync gescheitert" >> "${logFile}"; exit 1; }
+rsync -a --delete \
+  --filter='protect data/' \
+  --filter='protect uploads/' \
+  --filter='protect backups/' \
+  --filter='protect .env' \
+  --filter='protect update.log' \
+  --filter='protect node_modules/' \
+  --exclude=data/ --exclude=uploads/ --exclude=backups/ --exclude=.env --exclude=update.log --exclude=node_modules/ \
+  "${tmpDir}/Druckerei-Tracker-main/" "${appDir}/" || { echo "FEHLER: rsync gescheitert" >> "${logFile}"; exit 1; }
 echo "▸ Abhängigkeiten installieren..." >> "${logFile}"
 cd "${appDir}" && npm install --omit=dev >> "${logFile}" 2>&1
 rm -rf "${tmpZip}" "${tmpDir}"
