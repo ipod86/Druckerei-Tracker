@@ -96,6 +96,21 @@ window.applyTheme = function(settings) {
   if (navName) navName.textContent = appName;
   const loginName = document.getElementById('login-app-name');
   if (loginName) loginName.textContent = appName;
+
+  // Logo mit Cache-Buster laden (verhindert gecachten 404)
+  const setLogo = (id, path) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (path) {
+      el.src = path + '?t=' + Date.now();
+      el.style.display = '';
+      el.onerror = () => { el.style.display = 'none'; };
+    } else {
+      el.style.display = 'none';
+    }
+  };
+  setLogo('nav-logo', settings.logo_path || null);
+  setLogo('login-logo', settings.logo_path || null);
 };
 
 // ===== Show/Hide Login =====
