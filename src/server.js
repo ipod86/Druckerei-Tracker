@@ -5,6 +5,7 @@ const express = require('express');
 const session = require('express-session');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -56,6 +57,32 @@ app.use(session({
 // Body parsers
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// ── CSRF-Schutz ───────────────────────────────────────────────────────────────
+// Token wird in der Session gespeichert und als JS-lesbares Cookie gesetzt.
+// Alle state-ändernden API-Requests müssen ihn als X-CSRF-Token Header senden.
+app.use((req, res, next) => {
+  if (!req.session.csrfToken) {
+    req.session.csrfToken = crypto.randomBytes(32).toString('hex');
+  }
+  res.cookie('csrf-token', req.session.csrfToken, {
+    httpOnly: false,
+    sameSite: 'strict',
+    secure: req.secure || req.headers['x-forwarded-proto'] === 'https',
+  });
+
+  if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') {
+    return next();
+  }
+  if (!req.path.startsWith('/api/')) return next();
+
+  const token = req.headers['x-csrf-token'];
+  if (!token || token !== req.session.csrfToken) {
+    console.warn(`[CSRF] Abgelehnt: ${req.method} ${req.path}`);
+    return res.status(403).json({ error: 'CSRF-Validierung fehlgeschlagen' });
+  }
+  next();
+});
 
 // Static files — no caching for JS/CSS so updates are always picked up immediately
 app.use((req, res, next) => {

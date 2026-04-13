@@ -7,10 +7,18 @@ let notificationPollInterval = null;
 let searchDebounceTimer = null;
 
 // ===== API Fetch Wrapper =====
+function getCsrfToken() {
+  const c = document.cookie.split('; ').find(r => r.startsWith('csrf-token='));
+  return c ? c.split('=')[1] : '';
+}
+
 window.apiFetch = async function(url, opts = {}) {
   try {
+    const method = (opts.method || 'GET').toUpperCase();
+    const csrfHeaders = (method !== 'GET' && method !== 'HEAD')
+      ? { 'X-CSRF-Token': getCsrfToken() } : {};
     const res = await fetch(url, {
-      headers: { 'Content-Type': 'application/json', ...opts.headers },
+      headers: { 'Content-Type': 'application/json', ...csrfHeaders, ...opts.headers },
       ...opts,
     });
     if (res.status === 401) {

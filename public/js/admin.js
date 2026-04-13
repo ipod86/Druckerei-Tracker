@@ -1230,7 +1230,7 @@ async function loadBranding(content) {
       const fd = new FormData();
       fd.append('logo', logoFile);
       try {
-        const res = await fetch('/api/admin/settings/logo', { method: 'POST', body: fd });
+        const res = await fetch('/api/admin/settings/logo', { method: 'POST', body: fd, headers: { 'X-CSRF-Token': getCsrfToken() } });
         if (!res.ok) throw new Error('Logo upload failed');
         showToast('Logo hochgeladen', 'success');
         document.getElementById('nav-logo').src = '/uploads/branding/logo.png?t=' + Date.now();
@@ -1241,7 +1241,7 @@ async function loadBranding(content) {
       const fd = new FormData();
       fd.append('favicon', faviconFile);
       try {
-        const res = await fetch('/api/admin/settings/favicon', { method: 'POST', body: fd });
+        const res = await fetch('/api/admin/settings/favicon', { method: 'POST', body: fd, headers: { 'X-CSRF-Token': getCsrfToken() } });
         if (!res.ok) throw new Error('Favicon upload failed');
         showToast('Favicon hochgeladen', 'success');
       } catch (e) { showToast('Fehler: ' + e.message, 'error'); }

@@ -660,6 +660,7 @@ function setupFileHandlers(cardId) {
       const res = await fetch(`/api/cards/${cardId}/files`, {
         method: 'POST',
         body: formData,
+        headers: { 'X-CSRF-Token': getCsrfToken() },
       });
       if (!res.ok) {
         const err = await res.json();
