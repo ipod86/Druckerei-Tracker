@@ -77,7 +77,7 @@ async function generateSummaryPDF(cardId) {
 
   // Create pdfkit document
   const pdfkitBuffer = await new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ margin: 50, size: 'A4' });
+    const doc = new PDFDocument({ margin: 50, size: 'A4', bufferPages: true });
     const chunks = [];
     doc.on('data', chunk => chunks.push(chunk));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
@@ -257,6 +257,7 @@ async function generateSummaryPDF(cardId) {
          );
     }
 
+    doc.flushPages();
     doc.end();
   });
 
