@@ -135,5 +135,6 @@ try {
   `);
 } catch (_) {}
 try { db.exec('ALTER TABLE cards ADD COLUMN ghl_opportunity_id TEXT DEFAULT NULL'); } catch (_) {}
+try { db.exec('ALTER TABLE cards ADD COLUMN company_id INTEGER REFERENCES companies(id)'); } catch (_) {}
 
 module.exports = db;

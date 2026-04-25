@@ -601,8 +601,9 @@ window.showCreateCardModal = async function(columnId, columnName) {
   const body = document.getElementById('create-card-modal-body');
 
   try {
-    const [customers, locations, labels] = await Promise.all([
+    const [customers, companies, locations, labels] = await Promise.all([
       apiFetch('/api/customers'),
+      apiFetch('/api/companies'),
       apiFetch('/api/locations'),
       apiFetch('/api/labels'),
     ]);
@@ -632,6 +633,7 @@ window.showCreateCardModal = async function(columnId, columnName) {
                 <input type="text" id="customer-ac-input" autocomplete="off" placeholder="Name tippen oder neu eingeben…" style="width:100%">
                 <div id="customer-ac-list" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);z-index:200;max-height:180px;overflow-y:auto"></div>
                 <input type="hidden" name="customer_id" id="customer-ac-id">
+                <input type="hidden" name="company_id" id="customer-ac-company-id">
                 <input type="hidden" name="customer_new_name" id="customer-ac-new">
               </div>
             </div>
@@ -673,8 +675,8 @@ window.showCreateCardModal = async function(columnId, columnName) {
 
     modal.classList.remove('hidden');
 
-    // Customer autocomplete
-    setupCustomerAutocomplete(customers);
+    // Customer autocomplete (persons + companies)
+    setupCustomerAutocomplete(customers, companies);
 
     document.getElementById('create-card-modal-close').onclick = () => modal.classList.add('hidden');
     document.getElementById('create-card-modal-backdrop').onclick = () => modal.classList.add('hidden');
@@ -692,9 +694,10 @@ window.showCreateCardModal = async function(columnId, columnName) {
       }
 
       try {
-        // Create new customer on-the-fly if a name was typed that doesn't match any existing customer
+        // Create new customer on-the-fly if a name was typed that doesn't match any existing entry
         let customerId = data.customer_id ? parseInt(data.customer_id) : null;
-        if (!customerId && data.customer_new_name && data.customer_new_name.trim()) {
+        let companyId = data.company_id ? parseInt(data.company_id) : null;
+        if (!customerId && !companyId && data.customer_new_name && data.customer_new_name.trim()) {
           const newCust = await apiFetch('/api/customers', {
             method: 'POST',
             body: JSON.stringify({ name: data.customer_new_name.trim() }),
@@ -710,6 +713,7 @@ window.showCreateCardModal = async function(columnId, columnName) {
             description: data.description || null,
             column_id: parseInt(columnId),
             customer_id: customerId,
+            company_id: companyId,
             customer_email: data.customer_email || null,
             due_date: data.due_date || null,
             location_id: data.location_id ? parseInt(data.location_id) : null,
@@ -729,11 +733,12 @@ window.showCreateCardModal = async function(columnId, columnName) {
   }
 };
 
-function setupCustomerAutocomplete(customers) {
+function setupCustomerAutocomplete(customers, companies = []) {
   const input = document.getElementById('customer-ac-input');
   const list = document.getElementById('customer-ac-list');
   const hiddenId = document.getElementById('customer-ac-id');
   const hiddenNew = document.getElementById('customer-ac-new');
+  const hiddenCompanyId = document.getElementById('customer-ac-company-id');
 
   if (!input) return;
 
@@ -741,20 +746,23 @@ function setupCustomerAutocomplete(customers) {
     const val = q.trim().toLowerCase();
     list.innerHTML = '';
 
-    if (!val) {
-      list.style.display = 'none';
-      return;
-    }
+    if (!val) { list.style.display = 'none'; return; }
 
-    const matches = customers.filter(c =>
+    const personMatches = customers.filter(c =>
       c.name.toLowerCase().includes(val) ||
       (c.company_name || '').toLowerCase().includes(val) ||
       (c.customer_number || '').toLowerCase().includes(val) ||
       (c.email || '').toLowerCase().includes(val)
-    ).slice(0, 8);
+    ).slice(0, 6);
 
-    // "Neu anlegen" option if typed text doesn't exactly match any existing name
-    const exactMatch = customers.some(c => c.name.toLowerCase() === val);
+    const companyMatches = companies.filter(co =>
+      co.name.toLowerCase().includes(val) ||
+      (co.customer_number || '').toLowerCase().includes(val)
+    ).slice(0, 4);
+
+    const exactMatch = customers.some(c => c.name.toLowerCase() === val) ||
+                       companies.some(co => co.name.toLowerCase() === val);
+
     if (!exactMatch) {
       const newItem = document.createElement('div');
       newItem.className = 'ac-item ac-item-new';
@@ -763,27 +771,44 @@ function setupCustomerAutocomplete(customers) {
         e.preventDefault();
         input.value = q.trim();
         hiddenId.value = '';
+        if (hiddenCompanyId) hiddenCompanyId.value = '';
         hiddenNew.value = q.trim();
         list.style.display = 'none';
       });
       list.appendChild(newItem);
     }
 
-    matches.forEach(c => {
+    personMatches.forEach(c => {
       const item = document.createElement('div');
       item.className = 'ac-item';
-      item.textContent = c.name + (c.company_name ? ' – ' + c.company_name : '') + (c.customer_number ? ' #' + c.customer_number : '');
+      item.innerHTML = `<strong>${escapeHtml(c.name)}</strong>${c.company_name ? ` <span style="color:var(--text-muted);font-size:12px">– ${escapeHtml(c.company_name)}</span>` : ''}${c.customer_number ? ` <span style="color:var(--text-muted);font-size:11px">#${escapeHtml(c.customer_number)}</span>` : ''}`;
       item.addEventListener('mousedown', (e) => {
         e.preventDefault();
         input.value = c.name + (c.company_name ? ' – ' + c.company_name : '');
         hiddenId.value = c.id;
+        if (hiddenCompanyId) hiddenCompanyId.value = '';
         hiddenNew.value = '';
         list.style.display = 'none';
       });
       list.appendChild(item);
     });
 
-    list.style.display = matches.length > 0 || !exactMatch ? 'block' : 'none';
+    companyMatches.forEach(co => {
+      const item = document.createElement('div');
+      item.className = 'ac-item';
+      item.innerHTML = `<strong>${escapeHtml(co.name)}</strong> <span style="font-size:11px;color:var(--primary);background:var(--bg-secondary);padding:1px 5px;border-radius:3px">Firma</span>${co.customer_number ? ` <span style="color:var(--text-muted);font-size:11px">#${escapeHtml(co.customer_number)}</span>` : ''}`;
+      item.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        input.value = co.name;
+        hiddenId.value = '';
+        if (hiddenCompanyId) hiddenCompanyId.value = co.id;
+        hiddenNew.value = '';
+        list.style.display = 'none';
+      });
+      list.appendChild(item);
+    });
+
+    list.style.display = personMatches.length > 0 || companyMatches.length > 0 || !exactMatch ? 'block' : 'none';
   }
 
   input.addEventListener('input', () => {

@@ -62,7 +62,7 @@ router.get('/', requireAuth, (req, res) => {
   let query = `
     SELECT ca.*, col.name as column_name, col.group_id,
            g.name as group_name, g.color as group_color, g.order_index as group_order,
-           cu.name as customer_name,
+           COALESCE(cu.name, dco.name) as customer_name,
            l.name as location_name,
            u.username as created_by_name,
            (SELECT COUNT(*) FROM checklist_items ci JOIN checklists ch ON ci.checklist_id = ch.id WHERE ch.card_id = ca.id) as checklist_total,
@@ -71,6 +71,7 @@ router.get('/', requireAuth, (req, res) => {
     JOIN columns col ON ca.column_id = col.id
     JOIN groups g ON col.group_id = g.id
     LEFT JOIN customers cu ON ca.customer_id = cu.id
+    LEFT JOIN companies dco ON ca.company_id = dco.id
     LEFT JOIN locations l ON ca.location_id = l.id
     LEFT JOIN users u ON ca.created_by = u.id
     WHERE ca.archived = 0
@@ -175,7 +176,9 @@ router.get('/:id', requireAuth, (req, res) => {
   const card = db.prepare(`
     SELECT ca.*, col.name as column_name, col.group_id, col.time_limit_hours, col.time_limit_days, col.escalation_time,
            g.name as group_name, g.color as group_color, g.order_index as group_order,
-           cu.name as customer_name, co.name as customer_company, cu.email as customer_email_addr,
+           cu.name as customer_name, COALESCE(co.name, dco.name) as customer_company,
+           cu.email as customer_email_addr,
+           COALESCE(co.customer_number, dco.customer_number) as customer_number,
            l.name as location_name,
            u.username as created_by_name,
            COALESCE(
@@ -187,6 +190,7 @@ router.get('/:id', requireAuth, (req, res) => {
     JOIN groups g ON col.group_id = g.id
     LEFT JOIN customers cu ON ca.customer_id = cu.id
     LEFT JOIN companies co ON cu.company_id = co.id
+    LEFT JOIN companies dco ON ca.company_id = dco.id
     LEFT JOIN locations l ON ca.location_id = l.id
     LEFT JOIN users u ON ca.created_by = u.id
     WHERE ca.id = ?
@@ -265,7 +269,7 @@ router.get('/:id', requireAuth, (req, res) => {
 
 // POST / - create card
 router.post('/', requireEmployee, (req, res) => {
-  const { title, order_number, description, column_id, location_id, customer_id, customer_email, due_date, labels, card_type } = req.body;
+  const { title, order_number, description, column_id, location_id, customer_id, company_id, customer_email, due_date, labels, card_type } = req.body;
   if (!title || !column_id) return res.status(400).json({ error: 'title and column_id required' });
 
   const maxPos = db.prepare('SELECT MAX(position) as mx FROM cards WHERE column_id = ? AND archived = 0').get(column_id);
@@ -273,9 +277,9 @@ router.post('/', requireEmployee, (req, res) => {
   const type = card_type === 'divider' ? 'divider' : 'card';
 
   const result = db.prepare(`
-    INSERT INTO cards (title, order_number, description, column_id, location_id, customer_id, customer_email, due_date, created_by, position, card_type)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(title, order_number || null, description || null, column_id, location_id || null, customer_id || null, customer_email || null, due_date || null, req.user.id, position, type);
+    INSERT INTO cards (title, order_number, description, column_id, location_id, customer_id, company_id, customer_email, due_date, created_by, position, card_type)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(title, order_number || null, description || null, column_id, location_id || null, customer_id || null, company_id || null, customer_email || null, due_date || null, req.user.id, position, type);
 
   const cardId = result.lastInsertRowid;
 
@@ -307,7 +311,7 @@ router.put('/:id', requireEmployee, (req, res) => {
   const card = db.prepare('SELECT * FROM cards WHERE id = ?').get(req.params.id);
   if (!card) return res.status(404).json({ error: 'Card not found' });
 
-  const { title, order_number, description, customer_id, customer_email, due_date, location_id } = req.body;
+  const { title, order_number, description, customer_id, company_id, customer_email, due_date, location_id } = req.body;
 
   const updates = [];
   const vals = [];
@@ -316,6 +320,7 @@ router.put('/:id', requireEmployee, (req, res) => {
   if (order_number !== undefined) { updates.push('order_number = ?'); vals.push(order_number); }
   if (description !== undefined) { updates.push('description = ?'); vals.push(description); }
   if (customer_id !== undefined) { updates.push('customer_id = ?'); vals.push(customer_id); }
+  if (company_id !== undefined) { updates.push('company_id = ?'); vals.push(company_id); }
   if (customer_email !== undefined) { updates.push('customer_email = ?'); vals.push(customer_email); }
   if (due_date !== undefined) { updates.push('due_date = ?'); vals.push(due_date); }
   if (location_id !== undefined) { updates.push('location_id = ?'); vals.push(location_id); }
