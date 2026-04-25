@@ -135,13 +135,34 @@ router.post('/webhook', express.raw({ type: '*/*' }), (req, res) => {
 
       if (!isOpportunityEvent) return;
 
-      const oppId   = payload.id || payload.opportunity?.id || payload.opportunityId;
-      const stageId = payload.pipelineStageId || payload.opportunity?.pipelineStageId || payload.stageId;
-      if (!oppId || !stageId) return;
+      const oppId = payload.id || payload.opportunity?.id || payload.opportunityId;
+      if (!oppId) return;
+
+      // Stage ID: try direct fields first, then look up by name via pipeline API
+      let stageId = payload.pipelineStageId || payload.opportunity?.pipelineStageId || payload.stageId;
+      if (!stageId) {
+        const stageName = payload.pipleline_stage || payload.pipeline_stage || payload.stageName;
+        const pipelineId = payload.pipeline_id || payload.pipelineId;
+        if (stageName && pipelineId) {
+          try {
+            const pipelines = await getPipelines();
+            const pipeline = pipelines.find(p => p.id === pipelineId);
+            const stage = pipeline?.stages?.find(s => s.name === stageName);
+            stageId = stage?.id || null;
+          } catch { /* ignore */ }
+        }
+      }
+      if (!stageId) {
+        pushDebugEvent('webhook – keine Stage-ID gefunden', null, payload);
+        return;
+      }
 
       // Find card by ghl_opportunity_id
       const card = db.prepare('SELECT * FROM cards WHERE ghl_opportunity_id = ?').get(oppId);
-      if (!card) return;
+      if (!card) {
+        pushDebugEvent('webhook – Karte nicht gefunden', { oppId }, 'Keine Karte mit dieser GHL Opportunity ID');
+        return;
+      }
 
       // Find column mapped to this stage
       const mapping = db.prepare('SELECT * FROM ghl_column_mappings WHERE stage_id = ?').get(stageId);
