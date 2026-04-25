@@ -748,7 +748,9 @@ function setupCustomerAutocomplete(customers) {
 
     const matches = customers.filter(c =>
       c.name.toLowerCase().includes(val) ||
-      (c.company && c.company.toLowerCase().includes(val))
+      (c.company_name || '').toLowerCase().includes(val) ||
+      (c.customer_number || '').toLowerCase().includes(val) ||
+      (c.email || '').toLowerCase().includes(val)
     ).slice(0, 8);
 
     // "Neu anlegen" option if typed text doesn't exactly match any existing name
@@ -770,10 +772,10 @@ function setupCustomerAutocomplete(customers) {
     matches.forEach(c => {
       const item = document.createElement('div');
       item.className = 'ac-item';
-      item.textContent = c.name + (c.company ? ' – ' + c.company : '');
+      item.textContent = c.name + (c.company_name ? ' – ' + c.company_name : '') + (c.customer_number ? ' #' + c.customer_number : '');
       item.addEventListener('mousedown', (e) => {
         e.preventDefault();
-        input.value = c.name + (c.company ? ' – ' + c.company : '');
+        input.value = c.name + (c.company_name ? ' – ' + c.company_name : '');
         hiddenId.value = c.id;
         hiddenNew.value = '';
         list.style.display = 'none';
