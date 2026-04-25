@@ -77,12 +77,20 @@ async function getKundennummerFieldId() {
   try {
     const data = await ghlFetch(`/locations/${settings.location_id}/customFields`);
     const fields = data.customFields || [];
+    if (isDebug()) pushDebugEvent('getKundennummerFieldId – alle Felder', null, fields.map(f => ({ id: f.id, name: f.name, fieldKey: f.fieldKey })));
     const field = fields.find(f =>
       f.name === 'Kundennummer' ||
       f.fieldKey?.toLowerCase().includes('kundennummer')
     );
-    if (field) _kundennummerFieldId = field.id;
-  } catch { /* ignore, fall back to value-only search */ }
+    if (field) {
+      _kundennummerFieldId = field.id;
+      if (isDebug()) pushDebugEvent('getKundennummerFieldId – gefunden', null, { id: field.id, name: field.name, fieldKey: field.fieldKey });
+    } else {
+      if (isDebug()) pushDebugEvent('getKundennummerFieldId – NICHT gefunden', null, 'Kein Feld mit Name/Key "Kundennummer" in GHL – Suche nach Wert ohne Feld-Filter');
+    }
+  } catch (e) {
+    if (isDebug()) pushDebugEvent('getKundennummerFieldId – Fehler', null, e.message);
+  }
   return _kundennummerFieldId;
 }
 
@@ -95,16 +103,26 @@ async function findContactByCustomerNumber(customerNumber) {
       getKundennummerFieldId(),
     ]);
     const contacts = data.contacts || [];
+    if (isDebug()) {
+      pushDebugEvent('findContact – GHL Antwort', { query: customerNumber, fieldId },
+        contacts.map(c => ({ id: c.id, name: c.name, customFields: c.customFields || [] }))
+      );
+    }
     if (fieldId) {
-      return contacts.find(c =>
+      const match = contacts.find(c =>
         (c.customFields || []).some(f => f.id === fieldId && String(f.value) === String(customerNumber))
       ) || null;
+      if (isDebug()) pushDebugEvent('findContact – Ergebnis (nach Feld-ID)', { customerNumber, fieldId }, match ? { found: true, contact_id: match.id, name: match.name } : 'kein Treffer');
+      return match;
     }
     // Fallback: any custom field value matches
-    return contacts.find(c =>
+    const match = contacts.find(c =>
       (c.customFields || []).some(f => String(f.value) === String(customerNumber))
     ) || null;
-  } catch {
+    if (isDebug()) pushDebugEvent('findContact – Ergebnis (Wert-Suche)', { customerNumber }, match ? { found: true, contact_id: match.id, name: match.name } : 'kein Treffer');
+    return match;
+  } catch (e) {
+    if (isDebug()) pushDebugEvent('findContact – Fehler', { customerNumber }, e.message);
     return null;
   }
 }
