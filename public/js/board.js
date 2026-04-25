@@ -3,6 +3,7 @@
 let boardData = null;
 let boardFilters = { label_id: '', user_id: '' };
 let dragState = null;
+let _boardDragging = false;
 
 function closeCardMenu() {
   const m = document.getElementById('card-label-menu');
@@ -286,10 +287,12 @@ function setupBoardEvents() {
       scrollSpeed: 10,
       bubbleScroll: true,
       onStart: () => {
+        _boardDragging = true;
         document.body.style.overflow = 'hidden';
         startBoardScroll();
       },
       onEnd: async (evt) => {
+        _boardDragging = false;
         document.body.style.overflow = '';
         stopBoardScroll();
         const cardEl = evt.item;
@@ -829,3 +832,34 @@ function setupCustomerAutocomplete(customers, companies = []) {
     }
   });
 }
+
+// ── Auto-refresh polling (GHL webhook changes) ────────────────────────────────
+let _lastBoardTs = null;
+let _pollInterval = null;
+
+function startBoardPolling() {
+  if (_pollInterval) return;
+  _pollInterval = setInterval(async () => {
+    if (_boardDragging) return; // skip while dragging
+    try {
+      const { ts } = await apiFetch('/api/cards/last-updated');
+      if (_lastBoardTs === null) { _lastBoardTs = ts; return; }
+      if (ts && ts !== _lastBoardTs) {
+        _lastBoardTs = ts;
+        await loadBoard();
+      }
+    } catch { /* ignore network errors */ }
+  }, 15000);
+}
+
+function stopBoardPolling() {
+  if (_pollInterval) { clearInterval(_pollInterval); _pollInterval = null; }
+}
+
+// Start polling when board is active
+const _origLoadBoard = window.loadBoard;
+window.loadBoard = async function() {
+  await _origLoadBoard();
+  _lastBoardTs = null; // reset so next poll captures current state
+  startBoardPolling();
+};

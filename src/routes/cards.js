@@ -56,6 +56,12 @@ function triggerEmailRules(cardId, fromGroupId, toGroupId) {
   } catch (e) { /* email not configured */ }
 }
 
+// GET /last-updated — lightweight polling endpoint
+router.get('/last-updated', requireAuth, (req, res) => {
+  const row = db.prepare('SELECT MAX(updated_at) as ts FROM cards WHERE archived = 0').get();
+  res.json({ ts: row?.ts || null });
+});
+
 // GET / - all non-archived cards
 router.get('/', requireAuth, (req, res) => {
   const { column_id, group_id, location_id, label_id, user_id, overdue } = req.query;
