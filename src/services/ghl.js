@@ -4,6 +4,17 @@ const db = require('../db/database');
 
 const GHL_BASE = 'https://services.leadconnectorhq.com';
 
+// ── Debug event queue (in-memory, max 20 entries) ─────────────────────────────
+const debugQueue = [];
+function pushDebugEvent(action, payload, result) {
+  debugQueue.unshift({ ts: Date.now(), action, payload, result });
+  if (debugQueue.length > 20) debugQueue.pop();
+}
+function popDebugEvents() {
+  return debugQueue.splice(0);
+}
+// populated after module.exports below
+
 function getSettings() {
   return db.prepare('SELECT * FROM ghl_settings WHERE id = 1').get();
 }
@@ -20,16 +31,32 @@ async function ghlFetch(path, options = {}) {
   const settings = getSettings();
   if (!settings?.api_key) throw new Error('GHL API Key nicht konfiguriert');
 
+  const isDebug = settings.debug_mode === 1;
+  const method = options.method || 'GET';
+  const body = options.body ? JSON.parse(options.body) : undefined;
+
+  if (isDebug && method !== 'GET') {
+    pushDebugEvent(`${method} ${path}`, body, { debug: true, message: 'Debug-Modus — Request NICHT gesendet' });
+    // Return a fake success response so callers don't throw
+    return { opportunity: { id: 'DEBUG-' + Date.now() } };
+  }
+
   const res = await fetch(`${GHL_BASE}${path}`, {
     ...options,
     headers: { ...authHeaders(settings.api_key), ...(options.headers || {}) },
   });
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`GHL API Fehler ${res.status}: ${text}`);
+  let responseBody;
+  try { responseBody = await res.json(); } catch { responseBody = {}; }
+
+  if (isDebug && method !== 'GET') {
+    pushDebugEvent(`${method} ${path}`, body, { status: res.status, body: responseBody });
   }
-  return res.json();
+
+  if (!res.ok) {
+    throw new Error(`GHL API Fehler ${res.status}: ${JSON.stringify(responseBody)}`);
+  }
+  return responseBody;
 }
 
 // ── Pipelines ─────────────────────────────────────────────────────────────────
@@ -177,4 +204,5 @@ module.exports = {
   syncCardMoved,
   syncCardArchived,
   getColumnMapping,
+  popDebugEvents,
 };

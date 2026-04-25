@@ -112,6 +112,9 @@ try { db.exec('ALTER TABLE columns ADD COLUMN escalation_time TEXT DEFAULT NULL'
 // Add customer_number to companies if missing
 try { db.exec('ALTER TABLE companies ADD COLUMN customer_number TEXT DEFAULT NULL'); } catch (_) {}
 
+// Add debug flag to ghl_settings
+try { db.exec('ALTER TABLE ghl_settings ADD COLUMN debug_mode INTEGER DEFAULT 0'); } catch (_) {}
+
 // GHL integration tables
 try {
   db.exec(`

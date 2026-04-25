@@ -5,7 +5,7 @@ const crypto = require('crypto');
 const router = express.Router();
 const db = require('../db/database');
 const { requireAdmin } = require('../middleware/auth');
-const { getPipelines, getSettings, syncCardMoved } = require('../services/ghl');
+const { getPipelines, getSettings, syncCardMoved, popDebugEvents } = require('../services/ghl');
 
 // GET /api/ghl/settings
 router.get('/settings', requireAdmin, (req, res) => {
@@ -15,21 +15,27 @@ router.get('/settings', requireAdmin, (req, res) => {
     location_id:         s?.location_id        || '',
     fallback_contact_id: s?.fallback_contact_id || '',
     webhook_secret:      s?.webhook_secret      || '',
+    debug_mode:          s?.debug_mode === 1,
   });
+});
+
+// GET /api/ghl/debug-events  — poll for debug payloads
+router.get('/debug-events', requireAdmin, (req, res) => {
+  res.json(popDebugEvents());
 });
 
 // PUT /api/ghl/settings
 router.put('/settings', requireAdmin, (req, res) => {
-  const { api_key, location_id, fallback_contact_id } = req.body;
+  const { api_key, location_id, fallback_contact_id, debug_mode } = req.body;
 
   // Generate webhook secret if not yet set
   const existing = db.prepare('SELECT webhook_secret FROM ghl_settings WHERE id = 1').get();
   const secret = existing?.webhook_secret || crypto.randomBytes(24).toString('hex');
 
   db.prepare(`
-    UPDATE ghl_settings SET api_key = ?, location_id = ?, fallback_contact_id = ?, webhook_secret = ?
+    UPDATE ghl_settings SET api_key = ?, location_id = ?, fallback_contact_id = ?, webhook_secret = ?, debug_mode = ?
     WHERE id = 1
-  `).run(api_key || null, location_id || null, fallback_contact_id || null, secret);
+  `).run(api_key || null, location_id || null, fallback_contact_id || null, secret, debug_mode ? 1 : 0);
 
   res.json({ ok: true, webhook_secret: secret });
 });

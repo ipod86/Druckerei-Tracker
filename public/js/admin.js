@@ -1736,11 +1736,26 @@ async function loadGhl(content) {
         <label>Fallback-Kontakt ID <span style="color:var(--text-muted);font-size:12px">(GHL Contact ID wenn kein Kunde zugeordnet)</span></label>
         <input type="text" id="ghl-fallback-contact" value="${escapeHtml(settings.fallback_contact_id)}" placeholder="GHL Contact ID">
       </div>
+      <div class="form-group" style="margin-bottom:8px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="ghl-debug-mode" ${settings.debug_mode ? 'checked' : ''}>
+          <span>Debug-Modus <span style="color:var(--text-muted);font-size:12px">(API-Aufrufe werden NICHT gesendet, nur angezeigt)</span></span>
+        </label>
+      </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <button class="btn btn-primary" id="ghl-save-btn">Speichern</button>
         <button class="btn btn-secondary" id="ghl-test-btn">Verbindung testen</button>
         <span id="ghl-test-result" style="font-size:13px"></span>
       </div>
+    </div>
+
+    <div class="admin-section" id="ghl-debug-section" style="${settings.debug_mode ? '' : 'display:none'}">
+      <div class="admin-section-title">Debug-Events</div>
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">
+        Zeigt die letzten API-Aufrufe (max. 20). Events werden beim Abrufen geleert.
+      </p>
+      <button class="btn btn-secondary btn-sm" id="ghl-poll-events-btn">Events abrufen</button>
+      <div id="ghl-debug-events" style="margin-top:12px"></div>
     </div>
 
     <div class="admin-section">
@@ -1775,6 +1790,10 @@ async function loadGhl(content) {
     </div>
   `;
 
+  document.getElementById('ghl-debug-mode').addEventListener('change', (e) => {
+    document.getElementById('ghl-debug-section').style.display = e.target.checked ? '' : 'none';
+  });
+
   document.getElementById('ghl-save-btn').addEventListener('click', async () => {
     const btn = document.getElementById('ghl-save-btn');
     btn.disabled = true;
@@ -1785,6 +1804,7 @@ async function loadGhl(content) {
           api_key: document.getElementById('ghl-api-key').value.trim(),
           location_id: document.getElementById('ghl-location-id').value.trim(),
           fallback_contact_id: document.getElementById('ghl-fallback-contact').value.trim(),
+          debug_mode: document.getElementById('ghl-debug-mode').checked,
         }),
       });
       if (result.webhook_secret) {
@@ -1806,6 +1826,33 @@ async function loadGhl(content) {
       result.textContent = data.ok ? ('✓ ' + data.message) : ('✗ ' + data.error);
       result.style.color = data.ok ? 'var(--success)' : 'var(--danger)';
     } catch (e) { result.textContent = '✗ ' + e.message; result.style.color = 'var(--danger)'; }
+    btn.disabled = false;
+  });
+
+  document.getElementById('ghl-poll-events-btn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('ghl-poll-events-btn');
+    const container = document.getElementById('ghl-debug-events');
+    btn.disabled = true;
+    try {
+      const events = await apiFetch('/api/ghl/debug-events');
+      if (!events.length) {
+        container.innerHTML = '<p style="color:var(--text-muted);font-size:13px">Keine Events seit dem letzten Abruf.</p>';
+      } else {
+        container.innerHTML = events.map((ev, i) => {
+          const time = new Date(ev.ts).toLocaleTimeString('de-DE');
+          const json = JSON.stringify({ action: ev.action, payload: ev.payload, result: ev.result }, null, 2);
+          const id = `ghl-ev-${i}`;
+          return `
+            <div style="background:var(--bg-secondary,#1e1e2e);border:1px solid var(--border);border-radius:6px;margin-bottom:8px;overflow:hidden">
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg-tertiary,#181825)">
+                <span style="font-size:12px;font-family:monospace;color:var(--text-muted)">${escapeHtml(time)} — ${escapeHtml(ev.action)}</span>
+                <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('${id}').textContent);showToast('Kopiert','success')">Kopieren</button>
+              </div>
+              <pre id="${id}" style="margin:0;padding:10px 12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;word-break:break-all">${escapeHtml(json)}</pre>
+            </div>`;
+        }).join('');
+      }
+    } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
     btn.disabled = false;
   });
 
