@@ -167,10 +167,14 @@ async function renderCardModal(card) {
 
         <!-- Transition Values -->
         ${card.transition_values && card.transition_values.length > 0 ? `
-        <div class="card-section">
-          <div class="card-section-title">Übergabewerte</div>
+        <div class="card-section" id="transition-values-section">
+          <div class="card-section-title" style="display:flex;align-items:center;gap:8px">
+            Übergabewerte
+            ${canEdit ? `<button class="btn-icon-sm" id="tv-edit-btn" title="Bearbeiten">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>` : ''}
+          </div>
           ${(() => {
-            // Group by from_group_name (the group the card left)
             const groups = {};
             for (const tv of card.transition_values) {
               const key = tv.from_group_name || '?';
@@ -185,7 +189,7 @@ async function renderCardModal(card) {
                 </div>
                 <div class="transition-value-rows">
                   ${values.map(tv => `
-                    <div class="transition-value-row">
+                    <div class="transition-value-row" data-field-id="${tv.field_id}" data-field-type="${tv.field_type}" data-field-options="${escapeHtml(JSON.stringify(tv.field_options || []))}">
                       <span class="transition-value-label">${escapeHtml(tv.field_name)}</span>
                       <span class="transition-value-val">${escapeHtml(tv.value || '—')}</span>
                     </div>
@@ -237,6 +241,86 @@ async function renderCardModal(card) {
 
   // Setup event listeners
   document.getElementById('card-close-btn').onclick = closeCardModal;
+
+  // Transition values inline edit
+  const tvEditBtn = document.getElementById('tv-edit-btn');
+  if (tvEditBtn) {
+    tvEditBtn.addEventListener('click', () => {
+      const section = document.getElementById('transition-values-section');
+      const rows = section.querySelectorAll('.transition-value-row');
+      const isEditing = tvEditBtn.dataset.editing === '1';
+
+      if (!isEditing) {
+        // Switch to edit mode
+        rows.forEach(row => {
+          const valSpan = row.querySelector('.transition-value-val');
+          const fieldType = row.dataset.fieldType;
+          let fieldOptions = [];
+          try { fieldOptions = JSON.parse(row.dataset.fieldOptions); } catch {}
+          const current = valSpan.textContent === '—' ? '' : valSpan.textContent;
+
+          let input;
+          if (fieldType === 'select' && fieldOptions.length) {
+            input = document.createElement('select');
+            input.className = 'tv-edit-input';
+            input.innerHTML = `<option value="">Bitte wählen...</option>` +
+              fieldOptions.map(o => `<option value="${escapeHtml(o)}" ${o === current ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('');
+          } else if (fieldType === 'date') {
+            input = document.createElement('input');
+            input.type = 'date';
+            input.className = 'tv-edit-input';
+            input.value = current;
+          } else if (fieldType === 'textarea') {
+            input = document.createElement('textarea');
+            input.className = 'tv-edit-input';
+            input.rows = 2;
+            input.value = current;
+          } else {
+            input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'tv-edit-input';
+            input.value = current;
+          }
+          valSpan.replaceWith(input);
+        });
+
+        // Replace pencil with save/cancel
+        tvEditBtn.dataset.editing = '1';
+        tvEditBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><polyline points="20 6 9 17 4 12"/></svg>`;
+        tvEditBtn.title = 'Speichern';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'btn-icon-sm';
+        cancelBtn.title = 'Abbrechen';
+        cancelBtn.id = 'tv-cancel-btn';
+        cancelBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+        tvEditBtn.after(cancelBtn);
+
+        cancelBtn.addEventListener('click', () => {
+          // Re-render card to discard changes
+          renderCardModal(card);
+        });
+
+      } else {
+        // Save
+        const transitionValues = [];
+        rows.forEach(row => {
+          const input = row.querySelector('.tv-edit-input');
+          if (input) transitionValues.push({ field_id: parseInt(row.dataset.fieldId), value: input.value.trim() });
+        });
+
+        apiFetch(`/api/cards/${card.id}/transition-values`, {
+          method: 'PATCH',
+          body: JSON.stringify({ transition_values: transitionValues }),
+        }).then(async () => {
+          showToast('Übergabewerte gespeichert', 'success');
+          const updated = await apiFetch(`/api/cards/${card.id}`);
+          renderCardModal(updated);
+          if (typeof refreshBoard === 'function') refreshBoard();
+        }).catch(e => showToast('Fehler: ' + e.message, 'error'));
+      }
+    });
+  }
 
   // Title save on blur
   if (canEdit) {

@@ -226,7 +226,7 @@ router.get('/:id', requireAuth, (req, res) => {
   `).all(card.id);
 
   card.transition_values = db.prepare(`
-    SELECT tv.*, tf.field_name, tf.field_type,
+    SELECT tv.*, tf.field_name, tf.field_type, tf.field_options,
            gf.name as from_group_name, gt.name as to_group_name
     FROM transition_values tv
     JOIN transition_fields tf ON tv.field_id = tf.id
@@ -234,6 +234,9 @@ router.get('/:id', requireAuth, (req, res) => {
     LEFT JOIN groups gt ON tf.to_group_id = gt.id
     WHERE tv.card_id = ? ORDER BY tv.created_at
   `).all(card.id);
+  for (const tv of card.transition_values) {
+    if (tv.field_options) try { tv.field_options = JSON.parse(tv.field_options); } catch { tv.field_options = []; }
+  }
 
   res.json(card);
 });
@@ -331,6 +334,28 @@ router.post('/reorder', requireEmployee, (req, res) => {
     ids.forEach((id, idx) => update.run((idx + 1) * 1000, id, column_id));
   });
   updateAll(card_ids);
+  res.json({ ok: true });
+});
+
+// PATCH /:id/transition-values - update transition values without moving
+router.patch('/:id/transition-values', requireEmployee, (req, res) => {
+  const { transition_values } = req.body;
+  if (!Array.isArray(transition_values)) return res.status(400).json({ error: 'transition_values array required' });
+
+  for (const tv of transition_values) {
+    const existing = db.prepare('SELECT id FROM transition_values WHERE card_id = ? AND field_id = ?').get(req.params.id, tv.field_id);
+    if (existing) {
+      db.prepare('UPDATE transition_values SET value = ?, user_id = ?, created_at = CURRENT_TIMESTAMP WHERE id = ?')
+        .run(tv.value, req.user.id, existing.id);
+    } else {
+      db.prepare('INSERT INTO transition_values (card_id, field_id, value, user_id) VALUES (?, ?, ?, ?)')
+        .run(req.params.id, tv.field_id, tv.value, req.user.id);
+    }
+  }
+
+  db.prepare('INSERT INTO card_history (card_id, action_type, user_id, details) VALUES (?, ?, ?, ?)')
+    .run(req.params.id, 'updated', req.user.id, JSON.stringify({ field: 'transition_values' }));
+
   res.json({ ok: true });
 });
 

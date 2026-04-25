@@ -79,6 +79,26 @@ body {
 }
 .btn-icon svg { width: 18px; height: 18px; }
 .btn-icon:hover { opacity: 0.8; }
+.btn-icon-sm {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 4px;
+  border-radius: var(--radius);
+}
+.btn-icon-sm:hover { color: var(--primary); background: var(--bg); }
+.tv-edit-input {
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid var(--primary);
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-family: inherit;
+  background: white;
+}
 
 /* ===== FORMS ===== */
 .form-group { margin-bottom: 14px; }
