@@ -189,6 +189,7 @@ async function syncDeletedOpportunities() {
       }
 
       const isDeleted = res.status === 404 || res.status === 410
+        || (res.status === 400 && body?.message?.toLowerCase().includes('deleted'))
         || body?.opportunity?.status === 'deleted'
         || body?.status === 'deleted';
 
