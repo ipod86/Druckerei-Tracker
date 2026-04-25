@@ -327,13 +327,11 @@ function setupBoardEvents() {
       closeCardMenu();
 
       const cardId = btn.dataset.cardId;
-      const cardData = boardData.cardsByColumn;
       let card = null;
-      for (const cards of Object.values(cardData)) {
+      for (const cards of Object.values(boardData.cardsByColumn)) {
         card = cards.find(c => String(c.id) === String(cardId));
         if (card) break;
       }
-      const activeIds = new Set((card?.labels || []).map(l => l.id));
 
       let allLabels;
       try { allLabels = await apiFetch('/api/labels'); } catch { return; }
@@ -342,30 +340,38 @@ function setupBoardEvents() {
         return;
       }
 
-      const menu = document.createElement('div');
-      menu.className = 'card-label-menu';
-      menu.id = 'card-label-menu';
-      menu.innerHTML = allLabels.map(l => `
-        <label class="card-label-menu-item" data-label-id="${l.id}">
-          <span class="card-label-dot" style="background:${escapeHtml(l.color)}"></span>
-          <span class="card-label-menu-name">${escapeHtml(l.name)}</span>
-          <input type="checkbox" ${activeIds.has(l.id) ? 'checked' : ''} style="margin-left:auto">
-        </label>
-      `).join('');
+      const activeIds = new Set((card?.labels || []).map(l => l.id));
 
-      // Position below button
-      const rect = btn.getBoundingClientRect();
-      menu.style.top = (rect.bottom + window.scrollY + 4) + 'px';
-      menu.style.left = (rect.left + window.scrollX) + 'px';
-      document.body.appendChild(menu);
+      const overlay = document.createElement('div');
+      overlay.id = 'card-label-menu';
+      overlay.className = 'card-label-overlay';
+      overlay.innerHTML = `
+        <div class="card-label-modal">
+          <div class="card-label-modal-header">
+            <span>Labels</span>
+            <button class="card-label-close">&times;</button>
+          </div>
+          <div class="card-label-modal-list">
+            ${allLabels.map(l => `
+              <button class="card-label-modal-item ${activeIds.has(l.id) ? 'active' : ''}" data-label-id="${l.id}">
+                <span class="card-label-dot" style="background:${escapeHtml(l.color)}"></span>
+                <span>${escapeHtml(l.name)}</span>
+                <svg class="card-label-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="width:16px;height:16px;margin-left:auto"><polyline points="20 6 9 17 4 12"/></svg>
+              </button>
+            `).join('')}
+          </div>
+        </div>`;
 
-      menu.querySelectorAll('.card-label-menu-item').forEach(item => {
-        item.addEventListener('click', async (ev) => {
-          ev.preventDefault();
+      document.body.appendChild(overlay);
+
+      overlay.querySelector('.card-label-close').addEventListener('click', closeCardMenu);
+      overlay.addEventListener('click', (ev) => { if (ev.target === overlay) closeCardMenu(); });
+
+      overlay.querySelectorAll('.card-label-modal-item').forEach(item => {
+        item.addEventListener('click', async () => {
           const labelId = item.dataset.labelId;
-          const cb = item.querySelector('input[type=checkbox]');
-          const adding = !cb.checked;
-          cb.checked = adding;
+          const adding = !item.classList.contains('active');
+          item.classList.toggle('active', adding);
           try {
             if (adding) {
               await apiFetch(`/api/cards/${cardId}/labels`, { method: 'POST', body: JSON.stringify({ label_id: parseInt(labelId) }) });
@@ -373,11 +379,9 @@ function setupBoardEvents() {
               await apiFetch(`/api/cards/${cardId}/labels/${labelId}`, { method: 'DELETE' });
             }
             fetchAndRenderBoard();
-          } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
+          } catch (err) { showToast('Fehler: ' + err.message, 'error'); }
         });
       });
-
-      setTimeout(() => document.addEventListener('click', closeCardMenu, { once: true }), 0);
     });
   });
 
