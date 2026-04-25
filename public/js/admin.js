@@ -136,6 +136,10 @@ function setupGroupListHandlers(groups) {
       handle: '.drag-handle',
       draggable: '.group-item',
       animation: 150,
+      scroll: document.getElementById('admin-content'),
+      scrollSensitivity: 60,
+      scrollSpeed: 10,
+      bubbleScroll: true,
       onEnd: async () => {
         const order = [...groupList.querySelectorAll('.group-item')].map((el, i) => ({
           id: parseInt(el.dataset.groupId),
@@ -155,6 +159,10 @@ function setupGroupListHandlers(groups) {
         handle: '.drag-handle',
         draggable: '.column-item',
         animation: 150,
+        scroll: document.getElementById('admin-content'),
+        scrollSensitivity: 60,
+        scrollSpeed: 10,
+        bubbleScroll: true,
         onEnd: async () => {
           const order = [...list.querySelectorAll('.column-item')].map((el, i) => ({
             id: parseInt(el.dataset.columnId),

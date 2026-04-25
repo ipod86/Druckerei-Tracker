@@ -7,34 +7,40 @@ let dragState = null;
 // ── Horizontal auto-scroll while dragging ────────────────────────────────────
 let _boardScrollRaf = null;
 let _boardScrollX = 0;
+let _boardScrollY = 0;
 
 function _boardScrollTick() {
   const wrapper = document.getElementById('board-wrapper');
   if (wrapper && _boardScrollX !== 0) wrapper.scrollLeft += _boardScrollX;
+  // vertical: scroll the active column if possible, else the wrapper
+  if (_boardScrollY !== 0) {
+    const hovered = document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2);
+    const colCards = hovered && hovered.closest('.column-cards');
+    if (colCards) colCards.scrollTop += _boardScrollY;
+  }
   _boardScrollRaf = requestAnimationFrame(_boardScrollTick);
 }
 
 function startBoardScroll() {
   _boardScrollX = 0;
-  const EDGE = 80;   // px from edge that triggers scroll
-  const SPEED = 12;  // px per frame
+  _boardScrollY = 0;
+  const EDGE = 80;
+  const SPEED = 12;
 
   function onMove(e) {
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
     const vw = window.innerWidth;
-    if (clientX < EDGE) {
-      _boardScrollX = -SPEED * (1 - clientX / EDGE);
-    } else if (clientX > vw - EDGE) {
-      _boardScrollX = SPEED * (1 - (vw - clientX) / EDGE);
-    } else {
-      _boardScrollX = 0;
-    }
+    const vh = window.innerHeight;
+    _boardScrollX = clientX < EDGE ? -SPEED * (1 - clientX / EDGE)
+      : clientX > vw - EDGE ? SPEED * (1 - (vw - clientX) / EDGE) : 0;
+    _boardScrollY = clientY < EDGE ? -SPEED * (1 - clientY / EDGE)
+      : clientY > vh - EDGE ? SPEED * (1 - (vh - clientY) / EDGE) : 0;
   }
 
   document.addEventListener('mousemove', onMove);
   document.addEventListener('touchmove', onMove, { passive: true });
   _boardScrollRaf = requestAnimationFrame(_boardScrollTick);
-  // store cleanup refs on the function itself
   startBoardScroll._clean = () => {
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('touchmove', onMove);
@@ -44,6 +50,7 @@ function startBoardScroll() {
 function stopBoardScroll() {
   if (_boardScrollRaf) { cancelAnimationFrame(_boardScrollRaf); _boardScrollRaf = null; }
   _boardScrollX = 0;
+  _boardScrollY = 0;
   if (startBoardScroll._clean) { startBoardScroll._clean(); startBoardScroll._clean = null; }
 }
 
