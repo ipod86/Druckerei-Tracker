@@ -4,6 +4,49 @@ let boardData = null;
 let boardFilters = { label_id: '', user_id: '' };
 let dragState = null;
 
+// ── Horizontal auto-scroll while dragging ────────────────────────────────────
+let _boardScrollRaf = null;
+let _boardScrollX = 0;
+
+function _boardScrollTick() {
+  const wrapper = document.getElementById('board-wrapper');
+  if (wrapper && _boardScrollX !== 0) wrapper.scrollLeft += _boardScrollX;
+  _boardScrollRaf = requestAnimationFrame(_boardScrollTick);
+}
+
+function startBoardScroll() {
+  _boardScrollX = 0;
+  const EDGE = 80;   // px from edge that triggers scroll
+  const SPEED = 12;  // px per frame
+
+  function onMove(e) {
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const vw = window.innerWidth;
+    if (clientX < EDGE) {
+      _boardScrollX = -SPEED * (1 - clientX / EDGE);
+    } else if (clientX > vw - EDGE) {
+      _boardScrollX = SPEED * (1 - (vw - clientX) / EDGE);
+    } else {
+      _boardScrollX = 0;
+    }
+  }
+
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('touchmove', onMove, { passive: true });
+  _boardScrollRaf = requestAnimationFrame(_boardScrollTick);
+  // store cleanup refs on the function itself
+  startBoardScroll._clean = () => {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('touchmove', onMove);
+  };
+}
+
+function stopBoardScroll() {
+  if (_boardScrollRaf) { cancelAnimationFrame(_boardScrollRaf); _boardScrollRaf = null; }
+  _boardScrollX = 0;
+  if (startBoardScroll._clean) { startBoardScroll._clean(); startBoardScroll._clean = null; }
+}
+
 window.loadBoard = async function() {
   const container = document.getElementById('page-board');
   container.innerHTML = `
@@ -221,13 +264,17 @@ function setupBoardEvents() {
       delay: 150,
       delayOnTouchOnly: true,
       touchStartThreshold: 5,
-      scroll: col,           // scroll only this column, never the page
+      scroll: col,
       scrollSensitivity: 60,
       scrollSpeed: 10,
-      bubbleScroll: false,   // don't bubble up to page-level scroll containers
-      onStart: () => { document.body.style.overflow = 'hidden'; },
+      bubbleScroll: true,
+      onStart: () => {
+        document.body.style.overflow = 'hidden';
+        startBoardScroll();
+      },
       onEnd: async (evt) => {
         document.body.style.overflow = '';
+        stopBoardScroll();
         const cardEl = evt.item;
         const cardId = cardEl.dataset.cardId;
         const sourceColumnId = cardEl.dataset.columnId;
@@ -323,11 +370,6 @@ async function executeDrop(cardId, sourceColumnId, targetColEl) {
   if (sourceCol) {
     const sourceGroupOrder = parseInt(sourceCol.dataset.groupOrder);
     const sourceGroupId    = sourceCol.dataset.groupId;
-
-    if (targetGroupId !== sourceGroupId && targetGroupOrder < sourceGroupOrder) {
-      showToast('Karten können nicht rückwärts verschoben werden', 'error');
-      return;
-    }
 
     if (targetGroupId !== sourceGroupId) {
       try {
