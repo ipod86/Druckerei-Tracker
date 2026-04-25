@@ -231,9 +231,14 @@ async function renderCardModal(card) {
         ${canEdit ? `
         <div style="margin-bottom:16px">
           <div class="card-section-title">Kunde ändern</div>
-          <select id="card-customer-select" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;margin-bottom:6px">
-            <option value="">Kein Kunde</option>
-          </select>
+          <div style="position:relative">
+            <input type="text" id="card-customer-search" autocomplete="off"
+              placeholder="Name oder Firma tippen…"
+              style="width:100%;padding:6px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;margin-bottom:4px;box-sizing:border-box">
+            <div id="card-customer-suggestions" style="display:none;position:absolute;z-index:200;background:white;border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);width:100%;max-height:200px;overflow-y:auto"></div>
+          </div>
+          <input type="hidden" id="card-customer-select">
+          <div id="card-customer-current" style="font-size:12px;color:var(--text-muted);min-height:18px"></div>
         </div>` : ''}
       </div>
     </div>
@@ -453,20 +458,73 @@ function autoResize(el) {
 }
 
 async function loadMetaSelects(card) {
-  try {
-    const customers = await apiFetch('/api/customers');
+  const searchInput = document.getElementById('card-customer-search');
+  const hiddenInput = document.getElementById('card-customer-select');
+  const suggestions = document.getElementById('card-customer-suggestions');
+  const currentDisplay = document.getElementById('card-customer-current');
+  if (!searchInput) return;
 
-    const custSel = document.getElementById('card-customer-select');
-    if (custSel) {
-      customers.forEach(c => {
-        const opt = document.createElement('option');
-        opt.value = c.id;
-        opt.textContent = c.name + (c.company ? ' – ' + c.company : '');
-        if (c.id === card.customer_id) opt.selected = true;
-        custSel.appendChild(opt);
-      });
+  let allCustomers = [];
+  try { allCustomers = await apiFetch('/api/customers'); } catch {}
+
+  // Show current customer
+  if (card.customer_id) {
+    const cur = allCustomers.find(c => c.id === card.customer_id);
+    if (cur) {
+      searchInput.value = cur.name + (cur.company_name ? ' – ' + cur.company_name : '');
+      hiddenInput.value = cur.id;
+      currentDisplay.textContent = '';
     }
-  } catch (e) {}
+  }
+
+  function showSuggestions(query) {
+    const q = query.trim().toLowerCase();
+    if (!q) { suggestions.style.display = 'none'; return; }
+    const matches = allCustomers.filter(c =>
+      c.name.toLowerCase().includes(q) ||
+      (c.company_name || '').toLowerCase().includes(q)
+    ).slice(0, 10);
+
+    if (!matches.length) { suggestions.style.display = 'none'; return; }
+
+    suggestions.innerHTML = [
+      '<div class="customer-suggestion" data-id="" style="color:var(--text-muted)">— Kein Kunde —</div>',
+      ...matches.map(c => `
+        <div class="customer-suggestion" data-id="${c.id}">
+          <strong>${escapeHtml(c.name)}</strong>
+          ${c.company_name ? `<span style="color:var(--text-muted);font-size:12px"> – ${escapeHtml(c.company_name)}</span>` : ''}
+        </div>`)
+    ].join('');
+    suggestions.style.display = 'block';
+
+    suggestions.querySelectorAll('.customer-suggestion').forEach(item => {
+      item.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        const id = item.dataset.id;
+        if (!id) {
+          searchInput.value = '';
+          hiddenInput.value = '';
+          currentDisplay.textContent = 'Kein Kunde zugewiesen';
+        } else {
+          const c = allCustomers.find(c => String(c.id) === id);
+          searchInput.value = c.name + (c.company_name ? ' – ' + c.company_name : '');
+          hiddenInput.value = id;
+          currentDisplay.textContent = '';
+        }
+        suggestions.style.display = 'none';
+        // Auto-save
+        apiFetch(`/api/cards/${card.id}`, {
+          method: 'PUT',
+          body: JSON.stringify({ customer_id: id ? parseInt(id) : null }),
+        }).then(() => showToast('Kunde gespeichert', 'success'))
+          .catch(e => showToast('Fehler: ' + e.message, 'error'));
+      });
+    });
+  }
+
+  searchInput.addEventListener('input', () => showSuggestions(searchInput.value));
+  searchInput.addEventListener('focus', () => { if (searchInput.value) showSuggestions(searchInput.value); });
+  searchInput.addEventListener('blur', () => setTimeout(() => { suggestions.style.display = 'none'; }, 150));
 }
 
 function renderChecklists(checklists, canEdit, cardId) {

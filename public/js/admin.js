@@ -1736,7 +1736,11 @@ async function loadGhl(content) {
         <label>Fallback-Kontakt ID <span style="color:var(--text-muted);font-size:12px">(GHL Contact ID wenn kein Kunde zugeordnet)</span></label>
         <input type="text" id="ghl-fallback-contact" value="${escapeHtml(settings.fallback_contact_id)}" placeholder="GHL Contact ID">
       </div>
-      <button class="btn btn-primary" id="ghl-save-btn">Speichern</button>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-primary" id="ghl-save-btn">Speichern</button>
+        <button class="btn btn-secondary" id="ghl-test-btn">Verbindung testen</button>
+        <span id="ghl-test-result" style="font-size:13px"></span>
+      </div>
     </div>
 
     <div class="admin-section">
@@ -1788,6 +1792,20 @@ async function loadGhl(content) {
       }
       showToast('GHL Einstellungen gespeichert', 'success');
     } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
+    btn.disabled = false;
+  });
+
+  document.getElementById('ghl-test-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('ghl-test-btn');
+    const result = document.getElementById('ghl-test-result');
+    btn.disabled = true;
+    result.textContent = 'Teste…';
+    result.style.color = 'var(--text-muted)';
+    try {
+      const data = await apiFetch('/api/ghl/test');
+      result.textContent = data.ok ? ('✓ ' + data.message) : ('✗ ' + data.error);
+      result.style.color = data.ok ? 'var(--success)' : 'var(--danger)';
+    } catch (e) { result.textContent = '✗ ' + e.message; result.style.color = 'var(--danger)'; }
     btn.disabled = false;
   });
 

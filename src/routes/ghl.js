@@ -34,6 +34,20 @@ router.put('/settings', requireAdmin, (req, res) => {
   res.json({ ok: true, webhook_secret: secret });
 });
 
+// GET /api/ghl/test  — verify API key + location
+router.get('/test', requireAdmin, async (req, res) => {
+  const settings = db.prepare('SELECT * FROM ghl_settings WHERE id = 1').get();
+  if (!settings?.api_key || !settings?.location_id) {
+    return res.json({ ok: false, error: 'API Key oder Location ID fehlt' });
+  }
+  try {
+    const data = await getPipelines();
+    res.json({ ok: true, pipelines: data.length, message: `Verbindung OK — ${data.length} Pipeline(s) gefunden` });
+  } catch (e) {
+    res.json({ ok: false, error: e.message });
+  }
+});
+
 // GET /api/ghl/pipelines  — proxy to GHL
 router.get('/pipelines', requireAdmin, async (req, res) => {
   try {

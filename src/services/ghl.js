@@ -108,7 +108,7 @@ async function createOpportunity(card, pipelineId, stageId) {
 }
 
 async function moveOpportunity(ghlOpportunityId, stageId) {
-  await ghlFetch(`/opportunities/${ghlOpportunityId}/move-to-stage`, {
+  await ghlFetch(`/opportunities/${ghlOpportunityId}`, {
     method: 'PUT',
     body: JSON.stringify({ pipelineStageId: stageId }),
   });

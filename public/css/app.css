@@ -773,6 +773,12 @@ body.board-active .main-content {
   border-radius: 50%;
   flex-shrink: 0;
 }
+.customer-suggestion {
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.customer-suggestion:hover { background: var(--bg); }
 .card-files-badge {
   display: inline-flex;
   align-items: center;
