@@ -34,12 +34,6 @@ async function ghlFetch(path, options = {}) {
   const debugMode = settings.debug_mode === 1;
   const method = options.method || 'GET';
   const body = options.body ? JSON.parse(options.body) : undefined;
-  const readOnly = options.readOnly === true; // read-only calls always go through even in debug mode
-
-  if (debugMode && method !== 'GET' && !readOnly) {
-    pushDebugEvent(`${method} ${path}`, body, { debug: true, message: 'Debug-Modus — Request NICHT gesendet' });
-    return { opportunity: { id: 'DEBUG-' + Date.now() } };
-  }
 
   const res = await fetch(`${GHL_BASE}${path}`, {
     ...options,
@@ -49,8 +43,8 @@ async function ghlFetch(path, options = {}) {
   let responseBody;
   try { responseBody = await res.json(); } catch { responseBody = {}; }
 
-  if (debugMode && method !== 'GET' && !readOnly) {
-    pushDebugEvent(`${method} ${path}`, body, { status: res.status, body: responseBody });
+  if (debugMode) {
+    pushDebugEvent(`${method} ${path}`, body ?? null, { status: res.status, body: responseBody });
   }
 
   if (!res.ok) {
@@ -75,7 +69,6 @@ async function findContactByCustomerNumber(customerNumber) {
   try {
     const data = await ghlFetch('/contacts/search', {
       method: 'POST',
-      readOnly: true,
       body: JSON.stringify({
         locationId: settings.location_id,
         filters: [{ field: 'customFields.kundennummer', operator: 'eq', value: String(customerNumber) }],

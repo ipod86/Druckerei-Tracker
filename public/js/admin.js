@@ -1739,7 +1739,7 @@ async function loadGhl(content) {
       <div class="form-group" style="margin-bottom:8px">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="checkbox" id="ghl-debug-mode" ${settings.debug_mode ? 'checked' : ''}>
-          <span>Debug-Modus <span style="color:var(--text-muted);font-size:12px">(API-Aufrufe werden NICHT gesendet, nur angezeigt)</span></span>
+          <span>Debug-Modus <span style="color:var(--text-muted);font-size:12px">(alle GHL-Aufrufe werden normal ausgeführt und zusätzlich mitgeschrieben)</span></span>
         </label>
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
