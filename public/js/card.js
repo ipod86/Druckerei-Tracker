@@ -773,9 +773,12 @@ async function showMoveCardModal(card) {
 
   const currentGroupOrder = card.group_order;
 
+  // Build existing transition value map for pre-filling
+  const existingTv = {};
+  for (const tv of (card.transition_values || [])) existingTv[tv.field_id] = tv.value;
+
   let colOptions = '';
   for (const g of groups) {
-    if (g.order_index < currentGroupOrder) continue; // Skip past groups
     if (!g.columns || g.columns.length === 0) continue;
 
     for (const col of g.columns) {
@@ -821,7 +824,7 @@ async function showMoveCardModal(card) {
         container.innerHTML = fields.map(field => `
           <div class="transition-field">
             <label class="${field.required ? 'required' : ''}">${escapeHtml(field.field_name)}</label>
-            ${renderTransitionInput(field)}
+            ${renderTransitionInput(field, existingTv[field.id])}
           </div>
         `).join('');
       } else {
@@ -838,11 +841,6 @@ async function showMoveCardModal(card) {
     const targetColumnId = colSelect.value;
     const targetGroupId = selectedOpt?.dataset.groupId;
     const targetGroupOrder = parseInt(selectedOpt?.dataset.groupOrder);
-
-    if (targetGroupOrder < currentGroupOrder) {
-      showToast('Karten können nicht rückwärts verschoben werden', 'error');
-      return;
-    }
 
     // Collect transition values
     const transitionValues = [];
@@ -882,20 +880,21 @@ async function showMoveCardModal(card) {
   });
 }
 
-function renderTransitionInput(field) {
+function renderTransitionInput(field, existingValue) {
   const attrs = `data-field-id="${field.id}" ${field.required ? 'required' : ''}`;
+  const val = existingValue != null ? existingValue : '';
 
   if (field.field_type === 'select' && Array.isArray(field.field_options)) {
     return `<select ${attrs}>
       <option value="">Bitte wählen...</option>
-      ${field.field_options.map(opt => `<option value="${escapeHtml(opt)}">${escapeHtml(opt)}</option>`).join('')}
+      ${field.field_options.map(opt => `<option value="${escapeHtml(opt)}" ${opt === val ? 'selected' : ''}>${escapeHtml(opt)}</option>`).join('')}
     </select>`;
   } else if (field.field_type === 'date') {
-    return `<input type="date" ${attrs}>`;
+    return `<input type="date" ${attrs} value="${escapeHtml(val)}">`;
   } else if (field.field_type === 'textarea') {
-    return `<textarea ${attrs}></textarea>`;
+    return `<textarea ${attrs}>${escapeHtml(val)}</textarea>`;
   } else {
-    return `<input type="text" ${attrs}>`;
+    return `<input type="text" ${attrs} value="${escapeHtml(val)}">`;
   }
 }
 

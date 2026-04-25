@@ -406,9 +406,16 @@ async function moveCardToColumn(cardId, columnId, groupId, transitionValues) {
 }
 
 // ===== Move Modal =====
-function showMoveModal(cardId, targetColumnId, targetGroupId, fields) {
+async function showMoveModal(cardId, targetColumnId, targetGroupId, fields) {
   const modal = document.getElementById('move-modal');
   const body = document.getElementById('move-modal-body');
+
+  // Load existing transition values for pre-filling
+  const existingTv = {};
+  try {
+    const cardData = await apiFetch(`/api/cards/${cardId}`);
+    for (const tv of (cardData.transition_values || [])) existingTv[tv.field_id] = tv.value;
+  } catch {}
 
   // Source group name from the first field's from_group_name
   const sourceGroupName = fields[0]?.from_group_name || '';
@@ -452,17 +459,18 @@ function showMoveModal(cardId, targetColumnId, targetGroupId, fields) {
             <span class="tf-icon">${typeIcon}</span>${escapeHtml(field.field_name)}
           </label>`;
 
+        const ev = existingTv[field.id] != null ? existingTv[field.id] : '';
         if (field.field_type === 'select' && Array.isArray(field.field_options)) {
           fieldsHtml += `<select name="tf_${field.id}" ${field.required ? 'required' : ''}>
             <option value="">Bitte wählen...</option>
-            ${field.field_options.map(opt => `<option value="${escapeHtml(opt)}">${escapeHtml(opt)}</option>`).join('')}
+            ${field.field_options.map(opt => `<option value="${escapeHtml(opt)}" ${opt === ev ? 'selected' : ''}>${escapeHtml(opt)}</option>`).join('')}
           </select>`;
         } else if (field.field_type === 'date') {
-          fieldsHtml += `<input type="date" name="tf_${field.id}" ${field.required ? 'required' : ''}>`;
+          fieldsHtml += `<input type="date" name="tf_${field.id}" value="${escapeHtml(ev)}" ${field.required ? 'required' : ''}>`;
         } else if (field.field_type === 'textarea') {
-          fieldsHtml += `<textarea name="tf_${field.id}" rows="3" ${field.required ? 'required' : ''}></textarea>`;
+          fieldsHtml += `<textarea name="tf_${field.id}" rows="3" ${field.required ? 'required' : ''}>${escapeHtml(ev)}</textarea>`;
         } else {
-          fieldsHtml += `<input type="text" name="tf_${field.id}" ${field.required ? 'required' : ''}>`;
+          fieldsHtml += `<input type="text" name="tf_${field.id}" value="${escapeHtml(ev)}" ${field.required ? 'required' : ''}>`;
         }
         fieldsHtml += '</div>';
       }
