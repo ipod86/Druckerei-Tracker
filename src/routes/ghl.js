@@ -107,14 +107,17 @@ router.post('/webhook', express.raw({ type: '*/*' }), (req, res) => {
     return res.sendStatus(401);
   }
 
-  const rawBody = req.body?.toString() || '';
-
   let payload;
-  try {
-    payload = rawBody ? JSON.parse(rawBody) : {};
-  } catch {
-    pushDebugEvent('webhook – parse fehler', { 'content-type': req.headers['content-type'] }, rawBody.substring(0, 500));
-    return res.sendStatus(400);
+  if (req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)) {
+    payload = req.body; // already parsed by global middleware
+  } else {
+    const rawBody = req.body?.toString() || '';
+    try {
+      payload = rawBody ? JSON.parse(rawBody) : {};
+    } catch {
+      pushDebugEvent('webhook – parse fehler', { 'content-type': req.headers['content-type'] }, rawBody.substring(0, 500));
+      return res.sendStatus(400);
+    }
   }
 
   pushDebugEvent('webhook – empfangen', { 'content-type': req.headers['content-type'] }, payload);
