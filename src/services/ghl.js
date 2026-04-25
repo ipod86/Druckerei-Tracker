@@ -69,19 +69,41 @@ async function getPipelines() {
 
 // ── Contacts ──────────────────────────────────────────────────────────────────
 
+let _kundennummerFieldId = null;
+
+async function getKundennummerFieldId() {
+  if (_kundennummerFieldId) return _kundennummerFieldId;
+  const settings = getSettings();
+  try {
+    const data = await ghlFetch(`/locations/${settings.location_id}/customFields`);
+    const fields = data.customFields || [];
+    const field = fields.find(f =>
+      f.name === 'Kundennummer' ||
+      f.fieldKey?.toLowerCase().includes('kundennummer')
+    );
+    if (field) _kundennummerFieldId = field.id;
+  } catch { /* ignore, fall back to value-only search */ }
+  return _kundennummerFieldId;
+}
+
 async function findContactByCustomerNumber(customerNumber) {
   if (!customerNumber) return null;
   const settings = getSettings();
   try {
-    const data = await ghlFetch(
-      `/contacts/?locationId=${settings.location_id}&query=${encodeURIComponent(customerNumber)}&limit=5`
-    );
+    const [data, fieldId] = await Promise.all([
+      ghlFetch(`/contacts/?locationId=${settings.location_id}&query=${encodeURIComponent(customerNumber)}&limit=10`),
+      getKundennummerFieldId(),
+    ]);
     const contacts = data.contacts || [];
-    // Match by customField or name containing the number
+    if (fieldId) {
+      return contacts.find(c =>
+        (c.customFields || []).some(f => f.id === fieldId && String(f.value) === String(customerNumber))
+      ) || null;
+    }
+    // Fallback: any custom field value matches
     return contacts.find(c =>
-      (c.customFields || []).some(f => f.value === String(customerNumber)) ||
-      c.name?.includes(String(customerNumber))
-    ) || contacts[0] || null;
+      (c.customFields || []).some(f => String(f.value) === String(customerNumber))
+    ) || null;
   } catch {
     return null;
   }
@@ -90,7 +112,7 @@ async function findContactByCustomerNumber(customerNumber) {
 async function resolveContact(card) {
   const settings = getSettings();
 
-  // Card → Person → Company → customer_number → GHL contact
+  // Card → Person → Company → customer_number → GHL contact by Kundennummer field
   if (card.customer_id) {
     const person = db.prepare('SELECT * FROM customers WHERE id = ?').get(card.customer_id);
     if (person?.company_id) {
@@ -102,8 +124,12 @@ async function resolveContact(card) {
     }
   }
 
-  // Fallback contact
-  if (settings?.fallback_contact_id) return settings.fallback_contact_id;
+  // Fallback: look up fallback_contact_id as a Kundennummer in GHL
+  if (settings?.fallback_contact_id) {
+    const fallback = await findContactByCustomerNumber(settings.fallback_contact_id);
+    if (fallback) return fallback.id;
+    throw new Error(`Fallback-Kontakt mit Kundennummer "${settings.fallback_contact_id}" nicht in GHL gefunden`);
+  }
   throw new Error('Kein GHL-Kontakt gefunden und kein Fallback konfiguriert');
 }
 

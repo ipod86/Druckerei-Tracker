@@ -1733,8 +1733,8 @@ async function loadGhl(content) {
         <input type="text" id="ghl-location-id" value="${escapeHtml(settings.location_id)}" placeholder="abc123...">
       </div>
       <div class="form-group">
-        <label>Fallback-Kontakt ID <span style="color:var(--text-muted);font-size:12px">(GHL Contact ID wenn kein Kunde zugeordnet)</span></label>
-        <input type="text" id="ghl-fallback-contact" value="${escapeHtml(settings.fallback_contact_id)}" placeholder="GHL Contact ID">
+        <label>Fallback Kundennummer <span style="color:var(--text-muted);font-size:12px">(Kundennummer in GHL, wird verwendet wenn kein Kunde zugeordnet)</span></label>
+        <input type="text" id="ghl-fallback-contact" value="${escapeHtml(settings.fallback_contact_id)}" placeholder="z.B. 123456">
       </div>
       <div class="form-group" style="margin-bottom:8px">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
