@@ -5,7 +5,7 @@ const crypto = require('crypto');
 const router = express.Router();
 const db = require('../db/database');
 const { requireAdmin } = require('../middleware/auth');
-const { getPipelines, getSettings, syncCardMoved, popDebugEvents, pushDebugEvent } = require('../services/ghl');
+const { getPipelines, getSettings, syncCardMoved, syncDeletedOpportunities, popDebugEvents, pushDebugEvent } = require('../services/ghl');
 
 // GET /api/ghl/settings
 router.get('/settings', requireAdmin, (req, res) => {
@@ -22,6 +22,16 @@ router.get('/settings', requireAdmin, (req, res) => {
 // GET /api/ghl/debug-events  — poll for debug payloads
 router.get('/debug-events', requireAdmin, (req, res) => {
   res.json(popDebugEvents());
+});
+
+// POST /api/ghl/sync-deleted  — manual trigger: check all linked opportunities
+router.post('/sync-deleted', requireAdmin, async (req, res) => {
+  try {
+    const result = await syncDeletedOpportunities();
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
 });
 
 // PUT /api/ghl/settings

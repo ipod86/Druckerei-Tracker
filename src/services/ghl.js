@@ -171,22 +171,40 @@ async function syncDeletedOpportunities() {
   const cards = db.prepare('SELECT id, ghl_opportunity_id FROM cards WHERE ghl_opportunity_id IS NOT NULL AND archived = 0').all();
   if (!cards.length) return;
 
+  const debug = isDebug();
   let archived = 0;
   for (const card of cards) {
     try {
       const res = await fetch(`${GHL_BASE}/opportunities/${card.ghl_opportunity_id}`, {
         headers: authHeaders(settings.api_key),
       });
-      if (res.status === 404) {
+      let body = {};
+      try { body = await res.json(); } catch (_) {}
+
+      if (debug) {
+        pushDebugEvent('syncDeletedOpportunities – check', {
+          card_id: card.id,
+          ghl_opportunity_id: card.ghl_opportunity_id,
+        }, { status: res.status, body });
+      }
+
+      const isDeleted = res.status === 404 || res.status === 410
+        || body?.opportunity?.status === 'deleted'
+        || body?.status === 'deleted';
+
+      if (isDeleted) {
         db.prepare('UPDATE cards SET archived = 1, ghl_opportunity_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(card.id);
         db.prepare("INSERT INTO card_history (card_id, action_type, user_id, details) VALUES (?, 'archived', NULL, ?)")
-          .run(card.id, JSON.stringify({ source: 'ghl_sync', reason: 'Opportunity in GHL nicht mehr vorhanden (404)' }));
+          .run(card.id, JSON.stringify({ source: 'ghl_sync', reason: `Opportunity in GHL nicht mehr vorhanden (${res.status})` }));
         archived++;
-        if (isDebug()) pushDebugEvent('syncDeletedOpportunities – archiviert', { card_id: card.id, ghl_opportunity_id: card.ghl_opportunity_id }, 'Opportunity 404 → Karte archiviert');
+        console.log(`[GHL sync] Karte ${card.id} archiviert (HTTP ${res.status})`);
       }
-    } catch (_) { /* ignore network errors */ }
+    } catch (e) {
+      if (debug) pushDebugEvent('syncDeletedOpportunities – Fehler', { card_id: card.id }, e.message);
+    }
   }
-  if (archived > 0) console.log(`[GHL sync] ${archived} Karte(n) archiviert (Opportunity in GHL gelöscht)`);
+  if (debug && !archived) pushDebugEvent('syncDeletedOpportunities – fertig', { checked: cards.length }, 'Keine gelöschten Opportunities gefunden');
+  return { checked: cards.length, archived };
 }
 
 // ── Sync hooks (called from cards route) ──────────────────────────────────────

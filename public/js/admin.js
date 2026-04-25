@@ -1754,7 +1754,10 @@ async function loadGhl(content) {
       <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">
         Zeigt die letzten API-Aufrufe (max. 20). Events werden beim Abrufen geleert.
       </p>
-      <button class="btn btn-secondary btn-sm" id="ghl-poll-events-btn">Events abrufen</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-secondary btn-sm" id="ghl-poll-events-btn">Events abrufen</button>
+        <button class="btn btn-secondary btn-sm" id="ghl-sync-deleted-btn">Gelöschte jetzt prüfen</button>
+      </div>
       <div id="ghl-debug-events" style="margin-top:12px"></div>
     </div>
 
@@ -1860,6 +1863,20 @@ async function loadGhl(content) {
     const val = document.getElementById('ghl-webhook-secret').value;
     navigator.clipboard.writeText(val);
     showToast('Kopiert', 'success');
+  });
+
+  document.getElementById('ghl-sync-deleted-btn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('ghl-sync-deleted-btn');
+    btn.disabled = true;
+    btn.textContent = 'Prüfe…';
+    try {
+      const data = await apiFetch('/api/ghl/sync-deleted', { method: 'POST' });
+      showToast(`Geprüft: ${data.checked} Karte(n), ${data.archived} archiviert`, data.archived > 0 ? 'success' : 'info');
+    } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
+    btn.disabled = false;
+    btn.textContent = 'Gelöschte jetzt prüfen';
+    // Refresh debug events automatically
+    document.getElementById('ghl-poll-events-btn')?.click();
   });
 
   document.getElementById('ghl-load-pipelines-btn').addEventListener('click', async () => {
