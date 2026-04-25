@@ -13,6 +13,13 @@ function formatDate(str) {
   return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
+function formatDateTime(str) {
+  if (!str) return '—';
+  const d = new Date(str.includes('T') || str.includes('Z') ? str : str.replace(' ', 'T') + 'Z');
+  if (isNaN(d)) return str;
+  return d.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
 async function generateSummaryPDF(cardId) {
   const card = db.prepare(`
     SELECT ca.*, col.name as column_name, g.name as group_name,
@@ -264,9 +271,9 @@ async function generateSummaryPDF(cardId) {
         }
         const rowY = doc.y;
         doc.fontSize(9).font('Helvetica').fillColor('#888888')
-           .text(formatDate(h.created_at), leftMargin, rowY, { width: 90, continued: false });
-        doc.fillColor('#444444').text(h.username || '—', leftMargin + 95, rowY, { width: 90, continued: false });
-        doc.fillColor('#1a1a1a').font('Helvetica-Bold').text(actionLabel, leftMargin + 190, rowY, { width: contentWidth - 190 });
+           .text(formatDateTime(h.created_at), leftMargin, rowY, { width: 120, continued: false });
+        doc.fillColor('#444444').text(h.username || '—', leftMargin + 125, rowY, { width: 80, continued: false });
+        doc.fillColor('#1a1a1a').font('Helvetica-Bold').text(actionLabel, leftMargin + 210, rowY, { width: contentWidth - 210 });
         doc.fillColor('#000000');
         doc.moveDown(0.1);
       }

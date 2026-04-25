@@ -1,6 +1,6 @@
 {
   "name": "print-shop-tracker",
-  "version": "1.2.25",
+  "version": "1.2.26",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
