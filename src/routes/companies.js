@@ -34,9 +34,9 @@ router.get('/:id/persons', requireAuth, (req, res) => {
 
 // POST /
 router.post('/', requireEmployee, (req, res) => {
-  const { name, email, phone, notes } = req.body;
+  const { name, email, phone, notes, customer_number } = req.body;
   if (!name) return res.status(400).json({ error: 'name required' });
-  const result = db.prepare('INSERT INTO companies (name, email, phone, notes) VALUES (?,?,?,?)').run(name, email || null, phone || null, notes || null);
+  const result = db.prepare('INSERT INTO companies (name, email, phone, notes, customer_number) VALUES (?,?,?,?,?)').run(name, email || null, phone || null, notes || null, customer_number || null);
   res.status(201).json(db.prepare('SELECT * FROM companies WHERE id = ?').get(result.lastInsertRowid));
 });
 
@@ -44,9 +44,9 @@ router.post('/', requireEmployee, (req, res) => {
 router.put('/:id', requireEmployee, (req, res) => {
   const co = db.prepare('SELECT * FROM companies WHERE id = ?').get(req.params.id);
   if (!co) return res.status(404).json({ error: 'Company not found' });
-  const { name, email, phone, notes } = req.body;
-  db.prepare('UPDATE companies SET name=COALESCE(?,name), email=?, phone=?, notes=? WHERE id=?')
-    .run(name || null, email ?? co.email, phone ?? co.phone, notes ?? co.notes, req.params.id);
+  const { name, email, phone, notes, customer_number } = req.body;
+  db.prepare('UPDATE companies SET name=COALESCE(?,name), email=?, phone=?, notes=?, customer_number=? WHERE id=?')
+    .run(name || null, email ?? co.email, phone ?? co.phone, notes ?? co.notes, customer_number ?? co.customer_number, req.params.id);
   res.json(db.prepare('SELECT * FROM companies WHERE id = ?').get(req.params.id));
 });
 

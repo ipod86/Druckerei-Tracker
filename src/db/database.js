@@ -109,6 +109,9 @@ try { db.exec("ALTER TABLE cards ADD COLUMN card_type TEXT DEFAULT 'card'"); } c
 try { db.exec('ALTER TABLE columns ADD COLUMN time_limit_days INTEGER DEFAULT NULL'); } catch (_) {}
 try { db.exec('ALTER TABLE columns ADD COLUMN escalation_time TEXT DEFAULT NULL'); } catch (_) {}
 
+// Add customer_number to companies if missing
+try { db.exec('ALTER TABLE companies ADD COLUMN customer_number TEXT DEFAULT NULL'); } catch (_) {}
+
 // GHL integration tables
 try {
   db.exec(`

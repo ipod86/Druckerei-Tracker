@@ -315,6 +315,7 @@ function renderCustomerPage(companies, allCustomers) {
         <div class="company-block-header">
           <div style="flex:1;min-width:0">
             <strong>${escapeHtml(co.name)}</strong>
+            ${co.customer_number ? `<span class="tag" style="margin-left:8px">#${escapeHtml(co.customer_number)}</span>` : ''}
             ${co.email ? `<a href="mailto:${escapeHtml(co.email)}" style="font-size:12px;color:var(--secondary);margin-left:8px">${escapeHtml(co.email)}</a>` : ''}
             ${co.phone ? `<span style="font-size:12px;color:var(--secondary);margin-left:8px">${escapeHtml(co.phone)}</span>` : ''}
           </div>
@@ -406,9 +407,15 @@ function showCompanyForm(company) {
   body.innerHTML = `
     <div class="modal-body">
       <form id="company-form">
-        <div class="form-group">
-          <label class="required">Firmenname</label>
-          <input type="text" name="name" required value="${escapeHtml(company?.name || '')}">
+        <div class="form-row">
+          <div class="form-group" style="flex:2">
+            <label class="required">Firmenname</label>
+            <input type="text" name="name" required value="${escapeHtml(company?.name || '')}">
+          </div>
+          <div class="form-group" style="flex:1">
+            <label>Kundennummer</label>
+            <input type="text" name="customer_number" value="${escapeHtml(company?.customer_number || '')}" placeholder="z.B. K-1042">
+          </div>
         </div>
         <div class="form-row">
           <div class="form-group">

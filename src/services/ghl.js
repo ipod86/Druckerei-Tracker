@@ -63,13 +63,15 @@ async function findContactByCustomerNumber(customerNumber) {
 async function resolveContact(card) {
   const settings = getSettings();
 
-  // Try by customer number if card has a customer
+  // Card → Person → Company → customer_number → GHL contact
   if (card.customer_id) {
-    const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(card.customer_id);
-    if (customer) {
-      // Try customer number field (id as string, or order_number on the card)
-      const contact = await findContactByCustomerNumber(customer.id);
-      if (contact) return contact.id;
+    const person = db.prepare('SELECT * FROM customers WHERE id = ?').get(card.customer_id);
+    if (person?.company_id) {
+      const company = db.prepare('SELECT * FROM companies WHERE id = ?').get(person.company_id);
+      if (company?.customer_number) {
+        const contact = await findContactByCustomerNumber(company.customer_number);
+        if (contact) return contact.id;
+      }
     }
   }
 
