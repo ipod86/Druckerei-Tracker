@@ -180,12 +180,21 @@ function getColumnMapping(columnId) {
   return db.prepare('SELECT * FROM ghl_column_mappings WHERE column_id = ?').get(columnId);
 }
 
+function isDebug() {
+  return getSettings()?.debug_mode === 1;
+}
+
 async function syncCardCreated(card) {
   try {
     const mapping = getColumnMapping(card.column_id);
-    if (!mapping) return;
+    if (!mapping) {
+      if (isDebug()) pushDebugEvent('syncCardCreated – kein Mapping', { card_id: card.id, card_title: card.title, column_id: card.column_id }, 'Spalte hat keine GHL-Stage zugeordnet → übersprungen');
+      return;
+    }
+    if (isDebug()) pushDebugEvent('syncCardCreated – starte', { card_id: card.id, card_title: card.title, column_id: card.column_id, pipeline_id: mapping.pipeline_id, stage_id: mapping.stage_id }, 'Mapping gefunden, erstelle Opportunity…');
     await createOpportunity(card, mapping.pipeline_id, mapping.stage_id);
   } catch (e) {
+    if (isDebug()) pushDebugEvent('syncCardCreated – Fehler', { card_id: card.id }, e.message);
     console.error('[GHL] syncCardCreated:', e.message);
   }
 }
@@ -198,15 +207,20 @@ async function syncCardMoved(cardId, newColumnId) {
     const mapping = getColumnMapping(newColumnId);
 
     if (!card.ghl_opportunity_id) {
-      // No opportunity yet — create one if the target column is mapped
       if (mapping) {
+        if (isDebug()) pushDebugEvent('syncCardMoved – neue Opportunity', { card_id: card.id, card_title: card.title, new_column_id: newColumnId }, 'Noch keine Opportunity, erstelle sie in neuer Stage…');
         await createOpportunity(card, mapping.pipeline_id, mapping.stage_id);
+      } else {
+        if (isDebug()) pushDebugEvent('syncCardMoved – kein Mapping', { card_id: card.id, card_title: card.title, new_column_id: newColumnId }, 'Zielspalte hat kein Mapping → übersprungen');
       }
       return;
     }
 
     if (mapping) {
+      if (isDebug()) pushDebugEvent('syncCardMoved – verschiebe', { card_id: card.id, card_title: card.title, ghl_opportunity_id: card.ghl_opportunity_id, new_stage_id: mapping.stage_id }, 'Verschiebe Opportunity in neue Stage…');
       await moveOpportunity(card.ghl_opportunity_id, mapping.stage_id);
+    } else {
+      if (isDebug()) pushDebugEvent('syncCardMoved – kein Mapping', { card_id: card.id, card_title: card.title, new_column_id: newColumnId }, 'Zielspalte hat kein Mapping → Opportunity bleibt in alter Stage');
     }
   } catch (e) {
     console.error('[GHL] syncCardMoved:', e.message);
