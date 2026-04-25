@@ -38,6 +38,16 @@ function startScheduler() {
     }
   });
 
+  // Check GHL for deleted opportunities every 10 minutes
+  cron.schedule('*/10 * * * *', async () => {
+    try {
+      const { syncDeletedOpportunities } = require('../services/ghl');
+      await syncDeletedOpportunities();
+    } catch (e) {
+      console.error('[GHL sync] syncDeletedOpportunities error:', e.message);
+    }
+  });
+
   // Auto-archive cards daily at 03:00
   cron.schedule('0 3 * * *', () => {
     try {

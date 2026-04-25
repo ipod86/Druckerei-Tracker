@@ -164,6 +164,31 @@ async function deleteOpportunity(ghlOpportunityId) {
   await ghlFetch(`/opportunities/${ghlOpportunityId}`, { method: 'DELETE' });
 }
 
+async function syncDeletedOpportunities() {
+  const settings = getSettings();
+  if (!settings?.api_key || !settings?.location_id) return;
+
+  const cards = db.prepare('SELECT id, ghl_opportunity_id FROM cards WHERE ghl_opportunity_id IS NOT NULL AND archived = 0').all();
+  if (!cards.length) return;
+
+  let archived = 0;
+  for (const card of cards) {
+    try {
+      const res = await fetch(`${GHL_BASE}/opportunities/${card.ghl_opportunity_id}`, {
+        headers: authHeaders(settings.api_key),
+      });
+      if (res.status === 404) {
+        db.prepare('UPDATE cards SET archived = 1, ghl_opportunity_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(card.id);
+        db.prepare("INSERT INTO card_history (card_id, action_type, user_id, details) VALUES (?, 'archived', NULL, ?)")
+          .run(card.id, JSON.stringify({ source: 'ghl_sync', reason: 'Opportunity in GHL nicht mehr vorhanden (404)' }));
+        archived++;
+        if (isDebug()) pushDebugEvent('syncDeletedOpportunities – archiviert', { card_id: card.id, ghl_opportunity_id: card.ghl_opportunity_id }, 'Opportunity 404 → Karte archiviert');
+      }
+    } catch (_) { /* ignore network errors */ }
+  }
+  if (archived > 0) console.log(`[GHL sync] ${archived} Karte(n) archiviert (Opportunity in GHL gelöscht)`);
+}
+
 // ── Sync hooks (called from cards route) ──────────────────────────────────────
 
 function getColumnMapping(columnId) {
@@ -236,6 +261,7 @@ module.exports = {
   syncCardCreated,
   syncCardMoved,
   syncCardArchived,
+  syncDeletedOpportunities,
   getColumnMapping,
   popDebugEvents,
   pushDebugEvent,
