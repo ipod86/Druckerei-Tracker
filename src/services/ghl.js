@@ -31,13 +31,13 @@ async function ghlFetch(path, options = {}) {
   const settings = getSettings();
   if (!settings?.api_key) throw new Error('GHL API Key nicht konfiguriert');
 
-  const isDebug = settings.debug_mode === 1;
+  const debugMode = settings.debug_mode === 1;
   const method = options.method || 'GET';
   const body = options.body ? JSON.parse(options.body) : undefined;
+  const readOnly = options.readOnly === true; // read-only calls always go through even in debug mode
 
-  if (isDebug && method !== 'GET') {
+  if (debugMode && method !== 'GET' && !readOnly) {
     pushDebugEvent(`${method} ${path}`, body, { debug: true, message: 'Debug-Modus — Request NICHT gesendet' });
-    // Return a fake success response so callers don't throw
     return { opportunity: { id: 'DEBUG-' + Date.now() } };
   }
 
@@ -49,7 +49,7 @@ async function ghlFetch(path, options = {}) {
   let responseBody;
   try { responseBody = await res.json(); } catch { responseBody = {}; }
 
-  if (isDebug && method !== 'GET') {
+  if (debugMode && method !== 'GET' && !readOnly) {
     pushDebugEvent(`${method} ${path}`, body, { status: res.status, body: responseBody });
   }
 
@@ -69,61 +69,22 @@ async function getPipelines() {
 
 // ── Contacts ──────────────────────────────────────────────────────────────────
 
-let _kundennummerFieldId = null;
-
-async function getKundennummerFieldId() {
-  if (_kundennummerFieldId) return _kundennummerFieldId;
-  const settings = getSettings();
-  try {
-    const data = await ghlFetch(`/locations/${settings.location_id}/customFields`);
-    const fields = data.customFields || [];
-    if (isDebug()) pushDebugEvent('getKundennummerFieldId – alle Felder', null, fields.map(f => ({ id: f.id, name: f.name, fieldKey: f.fieldKey })));
-    const field = fields.find(f =>
-      f.name === 'Kundennummer' ||
-      f.fieldKey?.toLowerCase().includes('kundennummer')
-    );
-    if (field) {
-      _kundennummerFieldId = field.id;
-      if (isDebug()) pushDebugEvent('getKundennummerFieldId – gefunden', null, { id: field.id, name: field.name, fieldKey: field.fieldKey });
-    } else {
-      if (isDebug()) pushDebugEvent('getKundennummerFieldId – NICHT gefunden', null, 'Kein Feld mit Name/Key "Kundennummer" in GHL – Suche nach Wert ohne Feld-Filter');
-    }
-  } catch (e) {
-    const hint = e.message.includes('401')
-      ? e.message + ' → In GHL: Settings → Integrations → Private Integrations → Scopes "Contacts: Read" und "Locations/CustomFields: Read" aktivieren'
-      : e.message;
-    if (isDebug()) pushDebugEvent('getKundennummerFieldId – Fehler', null, hint);
-  }
-  return _kundennummerFieldId;
-}
-
 async function findContactByCustomerNumber(customerNumber) {
   if (!customerNumber) return null;
   const settings = getSettings();
   try {
-    const [data, fieldId] = await Promise.all([
-      ghlFetch(`/contacts/?locationId=${settings.location_id}&query=${encodeURIComponent(customerNumber)}&limit=10`),
-      getKundennummerFieldId(),
-    ]);
+    const data = await ghlFetch('/contacts/search', {
+      method: 'POST',
+      readOnly: true,
+      body: JSON.stringify({
+        locationId: settings.location_id,
+        filters: [{ field: 'customFields.kundennummer', operator: 'eq', value: String(customerNumber) }],
+        pageLimit: 5,
+      }),
+    });
     const contacts = data.contacts || [];
-    if (isDebug()) {
-      pushDebugEvent('findContact – GHL Antwort', { query: customerNumber, fieldId },
-        contacts.map(c => ({ id: c.id, name: c.name, customFields: c.customFields || [] }))
-      );
-    }
-    if (fieldId) {
-      const match = contacts.find(c =>
-        (c.customFields || []).some(f => f.id === fieldId && String(f.value) === String(customerNumber))
-      ) || null;
-      if (isDebug()) pushDebugEvent('findContact – Ergebnis (nach Feld-ID)', { customerNumber, fieldId }, match ? { found: true, contact_id: match.id, name: match.name } : 'kein Treffer');
-      return match;
-    }
-    // Fallback: any custom field value matches
-    const match = contacts.find(c =>
-      (c.customFields || []).some(f => String(f.value) === String(customerNumber))
-    ) || null;
-    if (isDebug()) pushDebugEvent('findContact – Ergebnis (Wert-Suche)', { customerNumber }, match ? { found: true, contact_id: match.id, name: match.name } : 'kein Treffer');
-    return match;
+    if (isDebug()) pushDebugEvent('findContact – Ergebnis', { customerNumber }, contacts.length ? { found: true, contact_id: contacts[0].id, name: contacts[0].contactName } : 'kein Treffer');
+    return contacts[0] || null;
   } catch (e) {
     if (isDebug()) pushDebugEvent('findContact – Fehler', { customerNumber }, e.message);
     return null;
