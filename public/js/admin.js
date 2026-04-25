@@ -100,20 +100,18 @@ function renderGroupList(groups) {
   return groups.map(g => `
     <div class="group-item" data-group-id="${g.id}">
       <div class="group-item-header">
+        <span class="drag-handle" title="Ziehen zum Sortieren">⠿</span>
         <div class="group-color-dot" style="background:${escapeHtml(g.color)}"></div>
         <span class="group-name">${escapeHtml(g.name)}</span>
-        <span style="font-size:12px;color:var(--text-muted)">Reihenfolge: ${g.order_index}</span>
         <div style="display:flex;gap:4px;margin-left:auto">
           <button class="btn btn-sm btn-secondary edit-group-btn" data-group-id="${g.id}">Bearbeiten</button>
           <button class="btn btn-sm btn-danger delete-group-btn" data-group-id="${g.id}">Löschen</button>
         </div>
       </div>
-      <div class="group-columns-list">
-        <div style="padding:6px 10px">
-          <button class="btn btn-sm btn-secondary add-column-btn" data-group-id="${g.id}" data-group-name="${escapeHtml(g.name)}">+ Spalte hinzufügen</button>
-        </div>
+      <div class="group-columns-list" data-group-id="${g.id}">
         ${(g.columns || []).map(col => `
-          <div class="column-item">
+          <div class="column-item" data-column-id="${col.id}">
+            <span class="drag-handle" title="Ziehen zum Sortieren">⠿</span>
             <span class="column-item-name">${escapeHtml(col.name)}</span>
             ${col.time_limit_days ? `<span class="tag" style="background:#fef9c3;color:#854d0e">${col.time_limit_days}T ${col.escalation_time || '12:00'} Limit</span>` : (col.time_limit_hours ? `<span class="tag" style="background:#fef9c3;color:#854d0e">${col.time_limit_hours}h Limit</span>` : '')}
             <div style="display:flex;gap:4px;margin-left:auto">
@@ -122,12 +120,54 @@ function renderGroupList(groups) {
             </div>
           </div>
         `).join('')}
+        <div style="padding:6px 10px">
+          <button class="btn btn-sm btn-secondary add-column-btn" data-group-id="${g.id}" data-group-name="${escapeHtml(g.name)}">+ Spalte hinzufügen</button>
+        </div>
       </div>
     </div>
   `).join('');
 }
 
 function setupGroupListHandlers(groups) {
+  // Drag-sort groups
+  const groupList = document.getElementById('group-list');
+  if (groupList && window.Sortable) {
+    Sortable.create(groupList, {
+      handle: '.drag-handle',
+      draggable: '.group-item',
+      animation: 150,
+      onEnd: async () => {
+        const order = [...groupList.querySelectorAll('.group-item')].map((el, i) => ({
+          id: parseInt(el.dataset.groupId),
+          order_index: i + 1,
+        }));
+        try {
+          await apiFetch('/api/groups/reorder', { method: 'PUT', body: JSON.stringify({ order }) });
+        } catch (e) { showToast('Sortierung speichern fehlgeschlagen', 'error'); }
+      },
+    });
+  }
+
+  // Drag-sort columns within each group
+  if (window.Sortable) {
+    document.querySelectorAll('.group-columns-list').forEach(list => {
+      Sortable.create(list, {
+        handle: '.drag-handle',
+        draggable: '.column-item',
+        animation: 150,
+        onEnd: async () => {
+          const order = [...list.querySelectorAll('.column-item')].map((el, i) => ({
+            id: parseInt(el.dataset.columnId),
+            order_index: i + 1,
+          }));
+          try {
+            await apiFetch('/api/columns/reorder', { method: 'PUT', body: JSON.stringify({ order }) });
+          } catch (e) { showToast('Sortierung speichern fehlgeschlagen', 'error'); }
+        },
+      });
+    });
+  }
+
   document.querySelectorAll('.edit-group-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const g = groups.find(g => g.id === parseInt(btn.dataset.groupId));

@@ -1355,6 +1355,20 @@ tr:hover td { background: #fafafa; }
   background: white;
 }
 .column-item-name { flex: 1; }
+.drag-handle {
+  cursor: grab;
+  color: var(--secondary);
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+  flex-shrink: 0;
+  user-select: none;
+}
+.drag-handle:active { cursor: grabbing; }
+.group-item.sortable-ghost, .column-item.sortable-ghost {
+  opacity: 0.4;
+  background: var(--primary-light, #e8f0fe);
+}
 
 /* Color picker */
 .color-input-group {
