@@ -81,6 +81,7 @@ app.use((req, res, next) => {
     return next();
   }
   if (!req.path.startsWith('/api/')) return next();
+  if (req.path === '/api/auth/login') return next();
 
   const token = req.headers['x-csrf-token'];
   if (!token || token !== req.session.csrfToken) {
