@@ -136,6 +136,15 @@ async function createOpportunity(card, pipelineId, stageId) {
   });
 
   const oppId = data.opportunity?.id;
+
+  // Check if GHL returned an existing opportunity (deduplication)
+  const existingCard = oppId ? db.prepare('SELECT id FROM cards WHERE ghl_opportunity_id = ? AND id != ?').get(oppId, card.id) : null;
+  pushDebugEvent('createOpportunity – Ergebnis', { card_id: card.id, card_title: card.title },
+    oppId
+      ? (existingCard ? `GHL hat bestehende Opportunity zurückgegeben (Karte #${existingCard.id} hat dieselbe ID ${oppId}) – GHL dedupliziert!` : `Neue Opportunity erstellt: ${oppId}`)
+      : 'Keine Opportunity-ID in GHL-Antwort'
+  );
+
   if (oppId) {
     db.prepare('UPDATE cards SET ghl_opportunity_id = ? WHERE id = ?').run(oppId, card.id);
   }
