@@ -355,10 +355,6 @@ router.post('/:id/move', requireEmployee, (req, res) => {
   `).get(column_id);
   if (!targetCol) return res.status(404).json({ error: 'Target column not found' });
 
-  // Forward-only rule: can move to same group OR higher order_index group
-  if (targetCol.gid !== card.group_id && targetCol.group_order < card.group_order) {
-    return res.status(400).json({ error: 'Cannot move card backwards to a previous group stage' });
-  }
 
   const oldColumnId = card.column_id;
   const oldGroupId = card.group_id;
