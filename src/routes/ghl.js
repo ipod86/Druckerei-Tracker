@@ -138,19 +138,16 @@ router.post('/webhook', express.raw({ type: '*/*' }), (req, res) => {
       const oppId = payload.id || payload.opportunity?.id || payload.opportunityId;
       if (!oppId) return;
 
-      // ── Deletion event → archive card ─────────────────────────────────────
-      const isDelete = type === 'OpportunityDelete'
-        || type === 'opportunity.delete'
-        || type.toLowerCase().includes('delet');
-
-      if (isDelete) {
+      // ── Status lost/won → archive card ────────────────────────────────────
+      const status = payload.status || payload.opportunity?.status || '';
+      if (status === 'lost' || status === 'won') {
         const card = db.prepare('SELECT * FROM cards WHERE ghl_opportunity_id = ? AND archived = 0').get(oppId);
         if (!card) return;
         db.prepare('UPDATE cards SET archived = 1, ghl_opportunity_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(card.id);
         db.prepare("INSERT INTO card_history (card_id, action_type, user_id, details) VALUES (?, 'archived', NULL, ?)")
-          .run(card.id, JSON.stringify({ source: 'ghl_webhook', reason: 'opportunity deleted in GHL' }));
-        pushDebugEvent('webhook – Karte archiviert', { oppId, card_id: card.id }, 'Opportunity in GHL gelöscht → Karte archiviert');
-        console.log(`[GHL webhook] Karte ${card.id} archiviert (Opportunity gelöscht)`);
+          .run(card.id, JSON.stringify({ source: 'ghl_webhook', reason: `opportunity status → ${status}` }));
+        pushDebugEvent('webhook – Karte archiviert', { oppId, card_id: card.id }, `Status in GHL auf "${status}" gesetzt → Karte archiviert`);
+        console.log(`[GHL webhook] Karte ${card.id} archiviert (Status: ${status})`);
         return;
       }
 
