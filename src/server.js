@@ -82,6 +82,7 @@ app.use((req, res, next) => {
   }
   if (!req.path.startsWith('/api/')) return next();
   if (req.path === '/api/auth/login') return next();
+  if (req.path === '/api/ghl/webhook') return next(); // external webhook, has own secret key check
 
   const token = req.headers['x-csrf-token'];
   if (!token || token !== req.session.csrfToken) {
