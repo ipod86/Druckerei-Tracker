@@ -160,11 +160,8 @@ async function moveOpportunity(ghlOpportunityId, stageId) {
   });
 }
 
-async function updateOpportunityStatus(ghlOpportunityId, status) {
-  await ghlFetch(`/opportunities/${ghlOpportunityId}`, {
-    method: 'PUT',
-    body: JSON.stringify({ status }),
-  });
+async function deleteOpportunity(ghlOpportunityId) {
+  await ghlFetch(`/opportunities/${ghlOpportunityId}`, { method: 'DELETE' });
 }
 
 // ── Sync hooks (called from cards route) ──────────────────────────────────────
@@ -224,8 +221,11 @@ async function syncCardArchived(cardId) {
   try {
     const card = db.prepare('SELECT * FROM cards WHERE id = ?').get(cardId);
     if (!card?.ghl_opportunity_id) return;
-    await updateOpportunityStatus(card.ghl_opportunity_id, 'lost');
+    if (isDebug()) pushDebugEvent('syncCardArchived', { card_id: card.id, ghl_opportunity_id: card.ghl_opportunity_id }, 'Lösche Opportunity in GHL…');
+    await deleteOpportunity(card.ghl_opportunity_id);
+    db.prepare('UPDATE cards SET ghl_opportunity_id = NULL WHERE id = ?').run(card.id);
   } catch (e) {
+    if (isDebug()) pushDebugEvent('syncCardArchived – Fehler', { card_id: cardId }, e.message);
     console.error('[GHL] syncCardArchived:', e.message);
   }
 }

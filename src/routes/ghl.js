@@ -138,7 +138,23 @@ router.post('/webhook', express.raw({ type: '*/*' }), (req, res) => {
       const oppId = payload.id || payload.opportunity?.id || payload.opportunityId;
       if (!oppId) return;
 
-      // Stage ID: try direct fields first, then look up by name via pipeline API
+      // ── Deletion event → archive card ─────────────────────────────────────
+      const isDelete = type === 'OpportunityDelete'
+        || type === 'opportunity.delete'
+        || type.toLowerCase().includes('delet');
+
+      if (isDelete) {
+        const card = db.prepare('SELECT * FROM cards WHERE ghl_opportunity_id = ? AND archived = 0').get(oppId);
+        if (!card) return;
+        db.prepare('UPDATE cards SET archived = 1, ghl_opportunity_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(card.id);
+        db.prepare("INSERT INTO card_history (card_id, action_type, user_id, details) VALUES (?, 'archived', NULL, ?)")
+          .run(card.id, JSON.stringify({ source: 'ghl_webhook', reason: 'opportunity deleted in GHL' }));
+        pushDebugEvent('webhook – Karte archiviert', { oppId, card_id: card.id }, 'Opportunity in GHL gelöscht → Karte archiviert');
+        console.log(`[GHL webhook] Karte ${card.id} archiviert (Opportunity gelöscht)`);
+        return;
+      }
+
+      // ── Stage change → move card ───────────────────────────────────────────
       let stageId = payload.pipelineStageId || payload.opportunity?.pipelineStageId || payload.stageId;
       if (!stageId) {
         const stageName = payload.pipleline_stage || payload.pipeline_stage || payload.stageName;
@@ -157,18 +173,15 @@ router.post('/webhook', express.raw({ type: '*/*' }), (req, res) => {
         return;
       }
 
-      // Find card by ghl_opportunity_id
       const card = db.prepare('SELECT * FROM cards WHERE ghl_opportunity_id = ?').get(oppId);
       if (!card) {
         pushDebugEvent('webhook – Karte nicht gefunden', { oppId }, 'Keine Karte mit dieser GHL Opportunity ID');
         return;
       }
 
-      // Find column mapped to this stage
       const mapping = db.prepare('SELECT * FROM ghl_column_mappings WHERE stage_id = ?').get(stageId);
       if (!mapping || mapping.column_id === card.column_id) return;
 
-      // Move card
       const col = db.prepare('SELECT group_id FROM columns WHERE id = ?').get(mapping.column_id);
       if (!col) return;
 
