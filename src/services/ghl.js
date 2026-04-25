@@ -229,4 +229,5 @@ module.exports = {
   syncCardArchived,
   getColumnMapping,
   popDebugEvents,
+  pushDebugEvent,
 };

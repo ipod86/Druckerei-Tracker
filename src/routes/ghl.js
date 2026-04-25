@@ -5,7 +5,7 @@ const crypto = require('crypto');
 const router = express.Router();
 const db = require('../db/database');
 const { requireAdmin } = require('../middleware/auth');
-const { getPipelines, getSettings, syncCardMoved, popDebugEvents } = require('../services/ghl');
+const { getPipelines, getSettings, syncCardMoved, popDebugEvents, pushDebugEvent } = require('../services/ghl');
 
 // GET /api/ghl/settings
 router.get('/settings', requireAdmin, (req, res) => {
@@ -107,8 +107,17 @@ router.post('/webhook', express.raw({ type: '*/*' }), (req, res) => {
     return res.sendStatus(401);
   }
 
+  const rawBody = req.body?.toString() || '';
+
   let payload;
-  try { payload = JSON.parse(req.body.toString()); } catch { return res.sendStatus(400); }
+  try {
+    payload = rawBody ? JSON.parse(rawBody) : {};
+  } catch {
+    pushDebugEvent('webhook – parse fehler', { 'content-type': req.headers['content-type'] }, rawBody.substring(0, 500));
+    return res.sendStatus(400);
+  }
+
+  pushDebugEvent('webhook – empfangen', { 'content-type': req.headers['content-type'] }, payload);
 
   res.sendStatus(200); // acknowledge immediately
 
