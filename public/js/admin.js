@@ -1820,54 +1820,76 @@ function renderGhlMapping(groups, pipelines, existingMappings) {
     return;
   }
 
-  const stageOptions = (selectedStageId) => {
-    let opts = '<option value="">– nicht synchronisieren –</option>';
-    for (const pl of pipelines) {
-      opts += `<optgroup label="${escapeHtml(pl.name)}">`;
-      for (const st of (pl.stages || [])) {
-        opts += `<option value="${escapeHtml(st.id)}" data-pipeline-id="${escapeHtml(pl.id)}" ${st.id === selectedStageId ? 'selected' : ''}>${escapeHtml(st.name)}</option>`;
-      }
-      opts += '</optgroup>';
-    }
-    return opts;
-  };
+  // Determine which pipeline is already in use (from existing mappings)
+  const usedPipelineIds = new Set(Object.values(existingMappings).map(m => m?.pipeline_id).filter(Boolean));
+  const defaultPipelineId = usedPipelineIds.size === 1
+    ? [...usedPipelineIds][0]
+    : pipelines[0]?.id || '';
 
-  let html = '<table class="admin-table"><thead><tr><th>Gruppe</th><th>Spalte</th><th>GHL Stage</th></tr></thead><tbody>';
-  for (const g of groups) {
-    for (const col of (g.columns || [])) {
-      const m = existingMappings[col.id];
-      html += `<tr>
-        <td>${escapeHtml(g.name)}</td>
-        <td>${escapeHtml(col.name)}</td>
-        <td>
-          <select class="ghl-stage-select" data-column-id="${col.id}">
-            ${stageOptions(m?.stage_id || '')}
-          </select>
-        </td>
-      </tr>`;
-    }
-  }
-  html += '</tbody></table>';
-  html += '<button class="btn btn-primary" id="ghl-save-mapping-btn" style="margin-top:16px">Mapping speichern</button>';
-  container.innerHTML = html;
+  const pipelineSelectHtml = `
+    <div class="form-group" style="margin-bottom:16px;max-width:320px">
+      <label>Pipeline</label>
+      <select id="ghl-pipeline-select">
+        ${pipelines.map(pl => `<option value="${escapeHtml(pl.id)}" ${pl.id === defaultPipelineId ? 'selected' : ''}>${escapeHtml(pl.name)}</option>`).join('')}
+      </select>
+    </div>
+    <div id="ghl-stage-table"></div>
+  `;
+  container.innerHTML = pipelineSelectHtml;
 
-  document.getElementById('ghl-save-mapping-btn').addEventListener('click', async () => {
-    const btn = document.getElementById('ghl-save-mapping-btn');
-    btn.disabled = true;
-    const mappings = {};
-    document.querySelectorAll('.ghl-stage-select').forEach(sel => {
-      const colId = sel.dataset.columnId;
-      const selectedOpt = sel.options[sel.selectedIndex];
-      if (sel.value) {
-        mappings[colId] = { pipeline_id: selectedOpt.dataset.pipelineId, stage_id: sel.value };
-      } else {
-        mappings[colId] = null;
+  function renderStageTable(pipelineId) {
+    const pipeline = pipelines.find(pl => pl.id === pipelineId);
+    if (!pipeline) return;
+    const stages = pipeline.stages || [];
+
+    const stageOptions = (selectedStageId) => {
+      let opts = '<option value="">– nicht synchronisieren –</option>';
+      for (const st of stages) {
+        opts += `<option value="${escapeHtml(st.id)}" ${st.id === selectedStageId ? 'selected' : ''}>${escapeHtml(st.name)}</option>`;
       }
+      return opts;
+    };
+
+    let html = '<table class="admin-table"><thead><tr><th>Gruppe</th><th>Spalte</th><th>GHL Stage</th></tr></thead><tbody>';
+    for (const g of groups) {
+      for (const col of (g.columns || [])) {
+        const m = existingMappings[col.id];
+        // Only pre-select if existing mapping belongs to this pipeline
+        const selectedStage = m?.pipeline_id === pipelineId ? m.stage_id : '';
+        html += `<tr>
+          <td>${escapeHtml(g.name)}</td>
+          <td>${escapeHtml(col.name)}</td>
+          <td>
+            <select class="ghl-stage-select" data-column-id="${col.id}" data-pipeline-id="${escapeHtml(pipelineId)}">
+              ${stageOptions(selectedStage)}
+            </select>
+          </td>
+        </tr>`;
+      }
+    }
+    html += '</tbody></table>';
+    html += '<button class="btn btn-primary" id="ghl-save-mapping-btn" style="margin-top:16px">Mapping speichern</button>';
+    document.getElementById('ghl-stage-table').innerHTML = html;
+
+    document.getElementById('ghl-save-mapping-btn').addEventListener('click', async () => {
+      const btn = document.getElementById('ghl-save-mapping-btn');
+      btn.disabled = true;
+      const mappings = {};
+      document.querySelectorAll('.ghl-stage-select').forEach(sel => {
+        const colId = sel.dataset.columnId;
+        mappings[colId] = sel.value ? { pipeline_id: sel.dataset.pipelineId, stage_id: sel.value } : null;
+      });
+      try {
+        await apiFetch('/api/ghl/mappings', { method: 'PUT', body: JSON.stringify({ mappings }) });
+        showToast('Mapping gespeichert', 'success');
+      } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
+      btn.disabled = false;
     });
-    try {
-      await apiFetch('/api/ghl/mappings', { method: 'PUT', body: JSON.stringify({ mappings }) });
-      showToast('Mapping gespeichert', 'success');
-    } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
-    btn.disabled = false;
+  }
+
+  renderStageTable(defaultPipelineId);
+
+  document.getElementById('ghl-pipeline-select').addEventListener('change', (e) => {
+    renderStageTable(e.target.value);
   });
 }
