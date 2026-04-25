@@ -837,18 +837,45 @@ function setupCustomerAutocomplete(customers, companies = []) {
 let _lastBoardTs = null;
 let _pollInterval = null;
 
+async function silentBoardRefresh() {
+  try {
+    const params = new URLSearchParams();
+    if (boardFilters.label_id) params.set('label_id', boardFilters.label_id);
+    if (boardFilters.user_id) params.set('user_id', boardFilters.user_id);
+    const newData = await apiFetch(`/api/cards/board?${params.toString()}`);
+
+    const oldByCol = boardData?.cardsByColumn || {};
+    const newByCol = newData?.cardsByColumn || {};
+
+    // Update each column whose card list changed
+    const allColIds = new Set([...Object.keys(oldByCol), ...Object.keys(newByCol)]);
+    for (const colId of allColIds) {
+      const oldIds = (oldByCol[colId] || []).map(c => c.id).join(',');
+      const newIds = (newByCol[colId] || []).map(c => c.id).join(',');
+      if (oldIds !== newIds) {
+        const colEl = document.querySelector(`.column-cards[data-column-id="${colId}"]`);
+        if (colEl) {
+          colEl.innerHTML = (newByCol[colId] || []).map(card => renderCardMini(card)).join('');
+        }
+      }
+    }
+
+    boardData = newData;
+  } catch { /* ignore */ }
+}
+
 function startBoardPolling() {
   if (_pollInterval) return;
   _pollInterval = setInterval(async () => {
-    if (_boardDragging) return; // skip while dragging
+    if (_boardDragging) return;
     try {
       const { ts } = await apiFetch('/api/cards/last-updated');
       if (_lastBoardTs === null) { _lastBoardTs = ts; return; }
       if (ts && ts !== _lastBoardTs) {
         _lastBoardTs = ts;
-        await loadBoard();
+        await silentBoardRefresh();
       }
-    } catch { /* ignore network errors */ }
+    } catch { /* ignore */ }
   }, 15000);
 }
 
@@ -856,10 +883,9 @@ function stopBoardPolling() {
   if (_pollInterval) { clearInterval(_pollInterval); _pollInterval = null; }
 }
 
-// Start polling when board is active
 const _origLoadBoard = window.loadBoard;
 window.loadBoard = async function() {
   await _origLoadBoard();
-  _lastBoardTs = null; // reset so next poll captures current state
+  _lastBoardTs = null;
   startBoardPolling();
 };

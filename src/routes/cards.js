@@ -477,6 +477,7 @@ router.post('/:id/archive', requireEmployee, (req, res) => {
   db.prepare('UPDATE cards SET archived = 1, archived_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.params.id);
   db.prepare('INSERT INTO card_history (card_id, action_type, user_id, details) VALUES (?, ?, ?, ?)')
     .run(req.params.id, 'archived', req.user.id, JSON.stringify({}));
+  setImmediate(() => ghl.syncCardArchived(req.params.id));
   res.json({ success: true });
 });
 
