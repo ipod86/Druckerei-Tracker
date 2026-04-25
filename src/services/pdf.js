@@ -45,6 +45,26 @@ async function generateSummaryPDF(cardId) {
     WHERE ch.card_id = ? ORDER BY ch.created_at
   `).all(cardId);
 
+  const colNameCache = new Map();
+  const getColName = id => {
+    if (!id) return null;
+    if (!colNameCache.has(id)) {
+      const col = db.prepare('SELECT name FROM columns WHERE id = ?').get(id);
+      colNameCache.set(id, col ? col.name : String(id));
+    }
+    return colNameCache.get(id);
+  };
+  for (const h of history) {
+    if (h.action_type === 'moved' && h.details) {
+      try {
+        const d = JSON.parse(h.details);
+        if (d.from_column_id) d.from_column_name = getColName(d.from_column_id);
+        if (d.to_column_id)   d.to_column_name   = getColName(d.to_column_id);
+        h.details = JSON.stringify(d);
+      } catch {}
+    }
+  }
+
   const comments = db.prepare(`
     SELECT cc.*, u.username FROM card_comments cc
     LEFT JOIN users u ON cc.user_id = u.id
@@ -233,7 +253,15 @@ async function generateSummaryPDF(cardId) {
         restored: 'Wiederhergestellt', escalation_sent: 'Erinnerung gesendet',
       };
       for (const h of history) {
-        const actionLabel = typeMap[h.action_type] || h.action_type;
+        let actionLabel = typeMap[h.action_type] || h.action_type;
+        if (h.action_type === 'moved' && h.details) {
+          try {
+            const d = JSON.parse(h.details);
+            const from = d.from_column_name || `Spalte ${d.from_column_id}`;
+            const to   = d.to_column_name   || `Spalte ${d.to_column_id}`;
+            if (d.from_column_id) actionLabel += ` (${from} → ${to})`;
+          } catch {}
+        }
         const rowY = doc.y;
         doc.fontSize(9).font('Helvetica').fillColor('#888888')
            .text(formatDate(h.created_at), leftMargin, rowY, { width: 90, continued: false });
