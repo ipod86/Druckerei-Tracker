@@ -814,7 +814,9 @@ function renderHistory(history) {
       try {
         const d = JSON.parse(h.details);
         if (h.action_type === 'moved' && d.from_column_id) {
-          details = ` (von Spalte ${d.from_column_id} nach ${d.to_column_id})`;
+          const from = d.from_column_name || `Spalte ${d.from_column_id}`;
+          const to   = d.to_column_name   || `Spalte ${d.to_column_id}`;
+          details = ` (von „${from}" nach „${to}")`;
         }
       } catch (e) {}
     }

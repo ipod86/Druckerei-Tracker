@@ -225,6 +225,27 @@ router.get('/:id', requireAuth, (req, res) => {
     WHERE ch.card_id = ? ORDER BY ch.created_at
   `).all(card.id);
 
+  // Resolve column names in move history entries
+  const colNameCache = new Map();
+  const getColName = id => {
+    if (!id) return null;
+    if (!colNameCache.has(id)) {
+      const col = db.prepare('SELECT name FROM columns WHERE id = ?').get(id);
+      colNameCache.set(id, col ? col.name : String(id));
+    }
+    return colNameCache.get(id);
+  };
+  for (const h of card.history) {
+    if (h.action_type === 'moved' && h.details) {
+      try {
+        const d = JSON.parse(h.details);
+        if (d.from_column_id) d.from_column_name = getColName(d.from_column_id);
+        if (d.to_column_id)   d.to_column_name   = getColName(d.to_column_id);
+        h.details = JSON.stringify(d);
+      } catch {}
+    }
+  }
+
   card.transition_values = db.prepare(`
     SELECT tv.*, tf.field_name, tf.field_type, tf.field_options,
            gf.name as from_group_name, gt.name as to_group_name
