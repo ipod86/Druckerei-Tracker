@@ -122,6 +122,7 @@ const dashboardRoutes = require('./routes/dashboard');
 const transitionRoutes = require('./routes/transitions');
 const emailRuleRoutes = require('./routes/emailRules');
 const adminRoutes = require('./routes/admin');
+const ghlRoutes = require('./routes/ghl');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -139,6 +140,7 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/transitions', transitionRoutes);
 app.use('/api/email-rules', emailRuleRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/ghl', ghlRoutes);
 
 // SPA fallback - serve index.html for all non-API routes
 app.get(/^(?!\/api\/).*/, (req, res) => {

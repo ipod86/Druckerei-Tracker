@@ -7,6 +7,7 @@ const fs = require('fs');
 const db = require('../db/database');
 const { requireAuth, requireAdmin, requireEmployee } = require('../middleware/auth');
 const { uploadMultiple } = require('../middleware/upload');
+const ghl = require('../services/ghl');
 
 // Helper: apply checklist templates for a column/group
 function applyChecklistTemplates(cardId, columnId) {
@@ -297,6 +298,7 @@ router.post('/', requireEmployee, (req, res) => {
   if (col) triggerEmailRules(cardId, null, col.group_id);
 
   const card = db.prepare('SELECT * FROM cards WHERE id = ?').get(cardId);
+  setImmediate(() => ghl.syncCardCreated(card));
   res.status(201).json(card);
 });
 
@@ -342,6 +344,7 @@ router.delete('/:id', requireEmployee, (req, res) => {
     db.prepare('UPDATE cards SET archived = 1, archived_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.params.id);
     db.prepare('INSERT INTO card_history (card_id, action_type, user_id, details) VALUES (?, ?, ?, ?)')
       .run(req.params.id, 'archived', req.user.id, JSON.stringify({}));
+    setImmediate(() => ghl.syncCardArchived(req.params.id));
   }
   res.json({ success: true });
 });
@@ -448,6 +451,8 @@ router.post('/:id/move', requireEmployee, (req, res) => {
   // Notify watchers
   const cardInfo = db.prepare('SELECT title FROM cards WHERE id = ?').get(req.params.id);
   notifyWatchers(req.params.id, req.user.id, `Karte "${cardInfo.title}" wurde verschoben`, 'card_moved');
+
+  setImmediate(() => ghl.syncCardMoved(req.params.id, column_id));
 
   const updated = db.prepare('SELECT * FROM cards WHERE id = ?').get(req.params.id);
   res.json(updated);

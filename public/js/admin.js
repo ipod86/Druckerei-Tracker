@@ -25,6 +25,9 @@ window.loadAdmin = function() {
         <div class="admin-sidebar-item" data-section="users">Benutzer</div>
         <div class="admin-sidebar-item" data-section="labels">Labels</div>
 
+        <div class="admin-sidebar-section">Integrationen</div>
+        <div class="admin-sidebar-item" data-section="ghl">GoHighLevel</div>
+
         <div class="admin-sidebar-section">System</div>
         <div class="admin-sidebar-item" data-section="branding">CI / Branding</div>
         <div class="admin-sidebar-item" data-section="backup">Backup</div>
@@ -71,6 +74,7 @@ async function loadAdminSection(section) {
       case 'backup': await loadBackup(content); break;
       case 'archive-settings': await loadArchiveSettings(content); break;
       case 'sysinfo': await loadSysinfo(content); break;
+      case 'ghl': await loadGhl(content); break;
       default: content.innerHTML = '<div class="empty-state">Unbekannter Bereich</div>';
     }
   } catch (e) {
@@ -1705,5 +1709,165 @@ async function loadSysinfo(content) {
       btn.textContent = 'Auf Updates prüfen';
       box.innerHTML = `<span style="font-size:12px;color:var(--danger)">Fehler: ${escapeHtml(e.message)}</span>`;
     }
+  });
+}
+
+// ===== GoHighLevel Integration =====
+async function loadGhl(content) {
+  const [settings, groups] = await Promise.all([
+    apiFetch('/api/ghl/settings'),
+    apiFetch('/api/groups'),
+  ]);
+
+  const webhookUrl = `${window.location.origin}/api/ghl/webhook`;
+
+  content.innerHTML = `
+    <div class="admin-section">
+      <div class="admin-section-title">GoHighLevel – API Zugangsdaten</div>
+      <div class="form-group">
+        <label>API Key (Location Token)</label>
+        <input type="password" id="ghl-api-key" value="${escapeHtml(settings.api_key)}" placeholder="eyJ...">
+      </div>
+      <div class="form-group">
+        <label>Location ID</label>
+        <input type="text" id="ghl-location-id" value="${escapeHtml(settings.location_id)}" placeholder="abc123...">
+      </div>
+      <div class="form-group">
+        <label>Fallback-Kontakt ID <span style="color:var(--text-muted);font-size:12px">(GHL Contact ID wenn kein Kunde zugeordnet)</span></label>
+        <input type="text" id="ghl-fallback-contact" value="${escapeHtml(settings.fallback_contact_id)}" placeholder="GHL Contact ID">
+      </div>
+      <button class="btn btn-primary" id="ghl-save-btn">Speichern</button>
+    </div>
+
+    <div class="admin-section">
+      <div class="admin-section-title">Webhook (GHL → Board)</div>
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">
+        Trage diese URL und den Key in GHL unter <strong>Settings → Integrations → Webhooks</strong> ein.
+        Event: <code>OpportunityStageUpdate</code>
+      </p>
+      <div class="form-group">
+        <label>Webhook URL</label>
+        <div style="display:flex;gap:8px">
+          <input type="text" value="${escapeHtml(webhookUrl)}" readonly style="flex:1">
+          <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${escapeHtml(webhookUrl)}');showToast('Kopiert','success')">Kopieren</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Webhook Secret Key</label>
+        <div style="display:flex;gap:8px">
+          <input type="text" value="${escapeHtml(settings.webhook_secret)}" readonly id="ghl-webhook-secret" style="flex:1;font-family:monospace">
+          <button class="btn btn-secondary btn-sm" id="ghl-copy-secret-btn">Kopieren</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="admin-section">
+      <div class="admin-section-title">Pipeline-Mapping</div>
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">
+        Weise jeder Spalte eine GHL Pipeline-Stage zu. Karten in nicht gemappten Spalten werden nicht synchronisiert.
+      </p>
+      <button class="btn btn-secondary btn-sm" id="ghl-load-pipelines-btn" style="margin-bottom:16px">Pipelines aus GHL laden</button>
+      <div id="ghl-mapping-container"></div>
+    </div>
+  `;
+
+  document.getElementById('ghl-save-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('ghl-save-btn');
+    btn.disabled = true;
+    try {
+      const result = await apiFetch('/api/ghl/settings', {
+        method: 'PUT',
+        body: JSON.stringify({
+          api_key: document.getElementById('ghl-api-key').value.trim(),
+          location_id: document.getElementById('ghl-location-id').value.trim(),
+          fallback_contact_id: document.getElementById('ghl-fallback-contact').value.trim(),
+        }),
+      });
+      if (result.webhook_secret) {
+        document.getElementById('ghl-webhook-secret').value = result.webhook_secret;
+      }
+      showToast('GHL Einstellungen gespeichert', 'success');
+    } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
+    btn.disabled = false;
+  });
+
+  document.getElementById('ghl-copy-secret-btn').addEventListener('click', () => {
+    const val = document.getElementById('ghl-webhook-secret').value;
+    navigator.clipboard.writeText(val);
+    showToast('Kopiert', 'success');
+  });
+
+  document.getElementById('ghl-load-pipelines-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('ghl-load-pipelines-btn');
+    btn.disabled = true;
+    btn.textContent = 'Lädt...';
+    try {
+      const [pipelines, existingMappings] = await Promise.all([
+        apiFetch('/api/ghl/pipelines'),
+        apiFetch('/api/ghl/mappings'),
+      ]);
+      renderGhlMapping(groups, pipelines, existingMappings);
+    } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
+    btn.disabled = false;
+    btn.textContent = 'Pipelines aus GHL laden';
+  });
+}
+
+function renderGhlMapping(groups, pipelines, existingMappings) {
+  const container = document.getElementById('ghl-mapping-container');
+  if (!pipelines.length) {
+    container.innerHTML = '<p style="color:var(--text-muted);font-size:13px">Keine Pipelines gefunden. API Key und Location ID prüfen.</p>';
+    return;
+  }
+
+  const stageOptions = (selectedStageId) => {
+    let opts = '<option value="">– nicht synchronisieren –</option>';
+    for (const pl of pipelines) {
+      opts += `<optgroup label="${escapeHtml(pl.name)}">`;
+      for (const st of (pl.stages || [])) {
+        opts += `<option value="${escapeHtml(st.id)}" data-pipeline-id="${escapeHtml(pl.id)}" ${st.id === selectedStageId ? 'selected' : ''}>${escapeHtml(st.name)}</option>`;
+      }
+      opts += '</optgroup>';
+    }
+    return opts;
+  };
+
+  let html = '<table class="admin-table"><thead><tr><th>Gruppe</th><th>Spalte</th><th>GHL Stage</th></tr></thead><tbody>';
+  for (const g of groups) {
+    for (const col of (g.columns || [])) {
+      const m = existingMappings[col.id];
+      html += `<tr>
+        <td>${escapeHtml(g.name)}</td>
+        <td>${escapeHtml(col.name)}</td>
+        <td>
+          <select class="ghl-stage-select" data-column-id="${col.id}">
+            ${stageOptions(m?.stage_id || '')}
+          </select>
+        </td>
+      </tr>`;
+    }
+  }
+  html += '</tbody></table>';
+  html += '<button class="btn btn-primary" id="ghl-save-mapping-btn" style="margin-top:16px">Mapping speichern</button>';
+  container.innerHTML = html;
+
+  document.getElementById('ghl-save-mapping-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('ghl-save-mapping-btn');
+    btn.disabled = true;
+    const mappings = {};
+    document.querySelectorAll('.ghl-stage-select').forEach(sel => {
+      const colId = sel.dataset.columnId;
+      const selectedOpt = sel.options[sel.selectedIndex];
+      if (sel.value) {
+        mappings[colId] = { pipeline_id: selectedOpt.dataset.pipelineId, stage_id: sel.value };
+      } else {
+        mappings[colId] = null;
+      }
+    });
+    try {
+      await apiFetch('/api/ghl/mappings', { method: 'PUT', body: JSON.stringify({ mappings }) });
+      showToast('Mapping gespeichert', 'success');
+    } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
+    btn.disabled = false;
   });
 }

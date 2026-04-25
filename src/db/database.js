@@ -109,4 +109,25 @@ try { db.exec("ALTER TABLE cards ADD COLUMN card_type TEXT DEFAULT 'card'"); } c
 try { db.exec('ALTER TABLE columns ADD COLUMN time_limit_days INTEGER DEFAULT NULL'); } catch (_) {}
 try { db.exec('ALTER TABLE columns ADD COLUMN escalation_time TEXT DEFAULT NULL'); } catch (_) {}
 
+// GHL integration tables
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ghl_settings (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      api_key TEXT,
+      location_id TEXT,
+      fallback_contact_id TEXT,
+      webhook_secret TEXT
+    );
+    INSERT OR IGNORE INTO ghl_settings (id) VALUES (1);
+
+    CREATE TABLE IF NOT EXISTS ghl_column_mappings (
+      column_id INTEGER PRIMARY KEY REFERENCES columns(id) ON DELETE CASCADE,
+      pipeline_id TEXT NOT NULL,
+      stage_id TEXT NOT NULL
+    );
+  `);
+} catch (_) {}
+try { db.exec('ALTER TABLE cards ADD COLUMN ghl_opportunity_id TEXT DEFAULT NULL'); } catch (_) {}
+
 module.exports = db;
