@@ -1642,19 +1642,29 @@ async function loadSysinfo(content) {
       logBox.textContent = (lastLog || '') + '\n▸ Warte auf Neustart...';
       logBox.scrollTop = logBox.scrollHeight;
       let tries = 0;
+      let okStreak = 0;
       const checkAlive = setInterval(async () => {
         tries++;
         try {
-          await fetch(window.location.origin + '/api/labels', { credentials: 'same-origin' });
-          // Server is back
-          clearInterval(checkAlive);
-          btn.textContent = '✓ Update abgeschlossen';
-          logBox.textContent = (lastLog || '') + '\n✓ Server läuft wieder.';
-          logBox.scrollTop = logBox.scrollHeight;
-          showToast('Update erfolgreich – Seite wird neu geladen', 'success');
-          setTimeout(() => window.location.reload(), 2000);
+          const res = await fetch(window.location.origin + '/api/auth/me', { credentials: 'same-origin' });
+          if (res.ok || res.status === 401) {
+            okStreak++;
+            logBox.textContent = (lastLog || '') + `\n▸ Server antwortet (${okStreak}/3)...`;
+            logBox.scrollTop = logBox.scrollHeight;
+          } else {
+            okStreak = 0;
+          }
+          if (okStreak >= 3) {
+            clearInterval(checkAlive);
+            btn.textContent = '✓ Update abgeschlossen';
+            logBox.textContent = (lastLog || '') + '\n✓ Server läuft wieder.';
+            logBox.scrollTop = logBox.scrollHeight;
+            showToast('Update erfolgreich – Seite wird neu geladen', 'success');
+            setTimeout(() => window.location.reload(), 1500);
+          }
         } catch(_) {
-          if (tries > 60) { clearInterval(checkAlive); btn.textContent = 'Update installieren'; btn.disabled = false; }
+          okStreak = 0;
+          if (tries > 90) { clearInterval(checkAlive); btn.textContent = 'Update installieren'; btn.disabled = false; }
         }
       }, 2000);
     }
