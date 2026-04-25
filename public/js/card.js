@@ -482,7 +482,9 @@ async function loadMetaSelects(card) {
     if (!q) { suggestions.style.display = 'none'; return; }
     const matches = allCustomers.filter(c =>
       c.name.toLowerCase().includes(q) ||
-      (c.company_name || '').toLowerCase().includes(q)
+      (c.company_name || '').toLowerCase().includes(q) ||
+      (c.customer_number || '').toLowerCase().includes(q) ||
+      (c.email || '').toLowerCase().includes(q)
     ).slice(0, 10);
 
     if (!matches.length) { suggestions.style.display = 'none'; return; }
@@ -493,6 +495,7 @@ async function loadMetaSelects(card) {
         <div class="customer-suggestion" data-id="${c.id}">
           <strong>${escapeHtml(c.name)}</strong>
           ${c.company_name ? `<span style="color:var(--text-muted);font-size:12px"> – ${escapeHtml(c.company_name)}</span>` : ''}
+          ${c.customer_number ? `<span style="color:var(--text-muted);font-size:11px"> #${escapeHtml(c.customer_number)}</span>` : ''}
         </div>`)
     ].join('');
     suggestions.style.display = 'block';

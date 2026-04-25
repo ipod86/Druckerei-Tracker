@@ -9,7 +9,7 @@ const { requireAuth, requireAdmin, requireEmployee } = require('../middleware/au
 router.get('/', requireAuth, (req, res) => {
   const { q } = req.query;
   let query = `
-    SELECT cu.*, co.name as company_name,
+    SELECT cu.*, co.name as company_name, co.customer_number,
            COUNT(DISTINCT ca.id) as card_count
     FROM customers cu
     LEFT JOIN companies co ON cu.company_id = co.id
@@ -17,9 +17,9 @@ router.get('/', requireAuth, (req, res) => {
   `;
   const params = [];
   if (q) {
-    query += ` WHERE (cu.name LIKE ? OR co.name LIKE ? OR cu.email LIKE ?)`;
+    query += ` WHERE (cu.name LIKE ? OR co.name LIKE ? OR cu.email LIKE ? OR co.customer_number LIKE ?)`;
     const like = `%${q}%`;
-    params.push(like, like, like);
+    params.push(like, like, like, like);
   }
   query += ` GROUP BY cu.id ORDER BY cu.name COLLATE NOCASE`;
 
