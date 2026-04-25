@@ -89,7 +89,10 @@ async function getKundennummerFieldId() {
       if (isDebug()) pushDebugEvent('getKundennummerFieldId – NICHT gefunden', null, 'Kein Feld mit Name/Key "Kundennummer" in GHL – Suche nach Wert ohne Feld-Filter');
     }
   } catch (e) {
-    if (isDebug()) pushDebugEvent('getKundennummerFieldId – Fehler', null, e.message);
+    const hint = e.message.includes('401')
+      ? e.message + ' → In GHL: Settings → Integrations → Private Integrations → Scopes "Contacts: Read" und "Locations/CustomFields: Read" aktivieren'
+      : e.message;
+    if (isDebug()) pushDebugEvent('getKundennummerFieldId – Fehler', null, hint);
   }
   return _kundennummerFieldId;
 }
