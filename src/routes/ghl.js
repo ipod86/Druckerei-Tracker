@@ -114,11 +114,17 @@ router.post('/webhook', express.raw({ type: '*/*' }), (req, res) => {
 
   setImmediate(async () => {
     try {
-      const type = payload.type || payload.event;
-      if (type !== 'OpportunityStageUpdate' && type !== 'opportunity.stageUpdate') return;
+      // Support both standard webhook and GHL Workflow webhook formats
+      const type = payload.type || payload.event || '';
+      const isOpportunityEvent = !type
+        || type === 'OpportunityStageUpdate'
+        || type === 'opportunity.stageUpdate'
+        || type.toLowerCase().includes('opportunity');
 
-      const oppId   = payload.id || payload.opportunity?.id;
-      const stageId = payload.pipelineStageId || payload.opportunity?.pipelineStageId;
+      if (!isOpportunityEvent) return;
+
+      const oppId   = payload.id || payload.opportunity?.id || payload.opportunityId;
+      const stageId = payload.pipelineStageId || payload.opportunity?.pipelineStageId || payload.stageId;
       if (!oppId || !stageId) return;
 
       // Find card by ghl_opportunity_id
