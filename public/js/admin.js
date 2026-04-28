@@ -1854,9 +1854,10 @@ async function loadSysinfo(content) {
 
 // ===== GoHighLevel Integration =====
 async function loadGhl(content) {
-  const [settings, groups] = await Promise.all([
+  const [settings, allBoards, groups] = await Promise.all([
     apiFetch('/api/ghl/settings'),
-    apiFetch('/api/groups'),
+    apiFetch('/api/boards'),
+    apiFetch(`/api/groups?board_id=${adminBoardId}`),
   ]);
 
   const webhookUrl = `${window.location.origin}/api/ghl/webhook`;
@@ -1928,6 +1929,7 @@ async function loadGhl(content) {
       <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">
         Weise jeder Spalte eine GHL Pipeline-Stage zu. Karten in nicht gemappten Spalten werden nicht synchronisiert.
       </p>
+      ${renderBoardSelector(allBoards, adminBoardId, null)}
       <button class="btn btn-secondary btn-sm" id="ghl-load-pipelines-btn" style="margin-bottom:16px">Pipelines aus GHL laden</button>
       <div id="ghl-mapping-container"></div>
     </div>
@@ -2018,6 +2020,15 @@ async function loadGhl(content) {
     // Refresh debug events automatically
     document.getElementById('ghl-poll-events-btn')?.click();
   });
+
+  const boardSel = document.getElementById('admin-board-selector');
+  if (boardSel) {
+    boardSel.addEventListener('change', () => {
+      adminBoardId = parseInt(boardSel.value, 10);
+      localStorage.setItem('adminBoardId', adminBoardId);
+      loadGhl(content);
+    });
+  }
 
   document.getElementById('ghl-load-pipelines-btn').addEventListener('click', async () => {
     const btn = document.getElementById('ghl-load-pipelines-btn');
