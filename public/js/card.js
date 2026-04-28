@@ -914,7 +914,8 @@ async function handleArchive(card) {
 }
 
 async function showMoveCardModal(card) {
-  const groups = await apiFetch('/api/groups');
+  const boardId = card.board_id || (typeof currentBoardId !== 'undefined' ? currentBoardId : '');
+  const groups = await apiFetch(`/api/groups${boardId ? `?board_id=${boardId}` : ''}`);
   const modal = document.getElementById('move-modal');
   const body = document.getElementById('move-modal-body');
 

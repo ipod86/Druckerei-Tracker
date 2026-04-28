@@ -1222,7 +1222,7 @@ async function loadChecklistTemplates(content) {
   const [templates, columns, groups] = await Promise.all([
     apiFetch('/api/admin/checklist-templates'),
     apiFetch('/api/columns'),
-    apiFetch('/api/groups'),
+    apiFetch(`/api/groups?board_id=${adminBoardId}`),
   ]);
 
   content.innerHTML = `

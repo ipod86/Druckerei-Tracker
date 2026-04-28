@@ -193,7 +193,7 @@ router.get('/board', requireAuth, (req, res) => {
 router.get('/:id', requireAuth, (req, res) => {
   const card = db.prepare(`
     SELECT ca.*, col.name as column_name, col.group_id, col.time_limit_hours, col.time_limit_days, col.escalation_time,
-           g.name as group_name, g.color as group_color, g.order_index as group_order,
+           g.name as group_name, g.color as group_color, g.order_index as group_order, g.board_id,
            cu.name as customer_name, COALESCE(co.name, dco.name) as customer_company,
            cu.email as customer_email_addr,
            COALESCE(co.customer_number, dco.customer_number) as customer_number,
