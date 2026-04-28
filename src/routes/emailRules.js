@@ -38,14 +38,26 @@ router.delete('/templates/:id', requireAdmin, (req, res) => {
 // ---- Email Rules ----
 
 router.get('/', requireAuth, (req, res) => {
-  const rules = db.prepare(`
-    SELECT er.*, g1.name as from_group_name, g2.name as to_group_name, et.name as template_name
-    FROM email_rules er
-    LEFT JOIN groups g1 ON er.from_group_id = g1.id
-    LEFT JOIN groups g2 ON er.to_group_id = g2.id
-    LEFT JOIN email_templates et ON er.template_id = et.id
-    ORDER BY er.name
-  `).all();
+  const { board_id } = req.query;
+  const rules = board_id
+    ? db.prepare(`
+        SELECT er.*, g1.name as from_group_name, g2.name as to_group_name, et.name as template_name
+        FROM email_rules er
+        LEFT JOIN groups g1 ON er.from_group_id = g1.id
+        LEFT JOIN groups g2 ON er.to_group_id = g2.id
+        LEFT JOIN email_templates et ON er.template_id = et.id
+        WHERE (g2.board_id = ? OR er.to_group_id IS NULL)
+          AND (g1.board_id = ? OR er.from_group_id IS NULL)
+        ORDER BY er.name
+      `).all(board_id, board_id)
+    : db.prepare(`
+        SELECT er.*, g1.name as from_group_name, g2.name as to_group_name, et.name as template_name
+        FROM email_rules er
+        LEFT JOIN groups g1 ON er.from_group_id = g1.id
+        LEFT JOIN groups g2 ON er.to_group_id = g2.id
+        LEFT JOIN email_templates et ON er.template_id = et.id
+        ORDER BY er.name
+      `).all();
 
   for (const r of rules) {
     if (r.recipients) try { r.recipients = JSON.parse(r.recipients); } catch (e) { r.recipients = []; }

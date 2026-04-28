@@ -1,6 +1,7 @@
 'use strict';
 
-let adminSection = 'board';
+let adminSection = 'boards';
+let adminBoardId = parseInt(localStorage.getItem('adminBoardId') || '1', 10);
 
 window.loadAdmin = function() {
   if (!currentUser || currentUser.role !== 'admin') {
@@ -12,7 +13,8 @@ window.loadAdmin = function() {
   container.innerHTML = `
     <div class="admin-layout">
       <div class="admin-sidebar">
-        <div class="admin-sidebar-section">Board</div>
+        <div class="admin-sidebar-section">Boards</div>
+        <div class="admin-sidebar-item" data-section="boards">Boards verwalten</div>
         <div class="admin-sidebar-item" data-section="board">Gruppen & Spalten</div>
         <div class="admin-sidebar-item" data-section="transitions">Übergänge</div>
 
@@ -50,7 +52,7 @@ window.loadAdmin = function() {
   });
 
   // Load default
-  const defaultItem = container.querySelector('[data-section="board"]');
+  const defaultItem = container.querySelector('[data-section="boards"]');
   if (defaultItem) defaultItem.click();
 };
 
@@ -60,6 +62,7 @@ async function loadAdminSection(section) {
 
   try {
     switch (section) {
+      case 'boards': await loadBoardsConfig(content); break;
       case 'board': await loadBoardConfig(content); break;
       case 'transitions': await loadTransitions(content); break;
       case 'smtp': await loadSmtp(content); break;
@@ -82,13 +85,115 @@ async function loadAdminSection(section) {
   }
 }
 
+// ===== Boards Management =====
+function renderBoardSelector(boards, selectedId, onChange) {
+  if (boards.length <= 1) return '';
+  return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
+    <label style="font-size:13px;font-weight:600;white-space:nowrap">Board:</label>
+    <select id="admin-board-selector" style="min-width:160px">
+      ${boards.map(b => `<option value="${b.id}" ${b.id === selectedId ? 'selected' : ''}>${escapeHtml(b.name)}</option>`).join('')}
+    </select>
+  </div>`;
+}
+
+async function loadBoardsConfig(content) {
+  const boards = await apiFetch('/api/boards');
+
+  function render() {
+    content.innerHTML = `
+      <div class="admin-section">
+        <div class="admin-section-title">Boards verwalten</div>
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">
+          Jedes Board hat eigene Gruppen, Spalten, Übergänge und E-Mail-Regeln. Kunden und Labels sind board-übergreifend geteilt.
+        </p>
+        <button class="btn btn-primary btn-sm" id="add-board-btn">+ Neues Board</button>
+        <div id="boards-list" style="margin-top:16px">
+          ${boards.map((b, i) => `
+            <div class="group-item" data-board-id="${b.id}" style="display:flex;align-items:center;gap:8px;padding:10px 14px;margin-bottom:6px">
+              <span class="drag-handle" title="Sortieren">⠿</span>
+              <span style="flex:1;font-weight:500">${escapeHtml(b.name)}</span>
+              <button class="btn btn-sm btn-secondary rename-board-btn" data-board-id="${b.id}" data-board-name="${escapeHtml(b.name)}">Umbenennen</button>
+              ${boards.length > 1 ? `<button class="btn btn-sm btn-danger delete-board-btn" data-board-id="${b.id}">Löschen</button>` : ''}
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+
+    document.getElementById('add-board-btn').addEventListener('click', async () => {
+      const name = prompt('Name des neuen Boards:');
+      if (!name) return;
+      try {
+        const b = await apiFetch('/api/boards', { method: 'POST', body: JSON.stringify({ name }) });
+        boards.push(b);
+        adminBoardId = b.id;
+        localStorage.setItem('adminBoardId', b.id);
+        render();
+        showToast('Board erstellt', 'success');
+      } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
+    });
+
+    content.querySelectorAll('.rename-board-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = parseInt(btn.dataset.boardId);
+        const name = prompt('Neuer Name:', btn.dataset.boardName);
+        if (!name) return;
+        try {
+          await apiFetch(`/api/boards/${id}`, { method: 'PUT', body: JSON.stringify({ name }) });
+          const b = boards.find(x => x.id === id);
+          if (b) b.name = name;
+          render();
+          showToast('Umbenannt', 'success');
+        } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
+      });
+    });
+
+    content.querySelectorAll('.delete-board-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = parseInt(btn.dataset.boardId);
+        if (!confirm('Board wirklich löschen? Alle Gruppen müssen vorher gelöscht sein.')) return;
+        try {
+          await apiFetch(`/api/boards/${id}`, { method: 'DELETE' });
+          const idx = boards.findIndex(x => x.id === id);
+          if (idx >= 0) boards.splice(idx, 1);
+          if (adminBoardId === id && boards.length > 0) {
+            adminBoardId = boards[0].id;
+            localStorage.setItem('adminBoardId', adminBoardId);
+          }
+          render();
+          showToast('Board gelöscht', 'success');
+        } catch (e) { showToast('Fehler: ' + e.message, 'error'); }
+      });
+    });
+
+    // Drag to reorder
+    const list = content.getElementById ? content.getElementById('boards-list') : content.querySelector('#boards-list');
+    if (list && window.Sortable) {
+      Sortable.create(list, {
+        handle: '.drag-handle',
+        animation: 150,
+        onEnd: async () => {
+          const items = list.querySelectorAll('[data-board-id]');
+          const order = Array.from(items).map((el, i) => ({ id: parseInt(el.dataset.boardId), order_index: i }));
+          try { await apiFetch('/api/boards/reorder', { method: 'PUT', body: JSON.stringify({ order }) }); } catch (e) {}
+        },
+      });
+    }
+  }
+
+  render();
+}
+
 // ===== Board Config =====
 async function loadBoardConfig(content) {
-  const groups = await apiFetch('/api/groups');
+  const allBoards = await apiFetch('/api/boards');
+  if (!allBoards.find(b => b.id === adminBoardId)) adminBoardId = allBoards[0]?.id || 1;
+  const groups = await apiFetch(`/api/groups?board_id=${adminBoardId}`);
 
   content.innerHTML = `
     <div class="admin-section">
       <div class="admin-section-title">Gruppen & Spalten</div>
+      ${renderBoardSelector(allBoards, adminBoardId, null)}
       <button class="btn btn-primary btn-sm" id="add-group-btn">+ Neue Gruppe</button>
       <div class="group-list" id="group-list" style="margin-top:16px">
         ${renderGroupList(groups)}
@@ -96,7 +201,16 @@ async function loadBoardConfig(content) {
     </div>
   `;
 
-  document.getElementById('add-group-btn').addEventListener('click', () => showGroupForm(null, groups));
+  const boardSel = document.getElementById('admin-board-selector');
+  if (boardSel) {
+    boardSel.addEventListener('change', () => {
+      adminBoardId = parseInt(boardSel.value, 10);
+      localStorage.setItem('adminBoardId', adminBoardId);
+      loadBoardConfig(content);
+    });
+  }
+
+  document.getElementById('add-group-btn').addEventListener('click', () => showGroupForm(null, groups, adminBoardId));
   setupGroupListHandlers(groups);
 }
 
@@ -224,7 +338,7 @@ function setupGroupListHandlers(groups) {
   });
 }
 
-function showGroupForm(group, allGroups) {
+function showGroupForm(group, allGroups, boardId) {
   showFormModal('Gruppe ' + (group ? 'bearbeiten' : 'erstellen'), `
     <div class="form-group">
       <label class="required">Name</label>
@@ -257,7 +371,7 @@ function showGroupForm(group, allGroups) {
     if (group) {
       await apiFetch(`/api/groups/${group.id}`, { method: 'PUT', body: JSON.stringify(data) });
     } else {
-      await apiFetch('/api/groups', { method: 'POST', body: JSON.stringify(data) });
+      await apiFetch('/api/groups', { method: 'POST', body: JSON.stringify({ ...data, board_id: boardId || adminBoardId }) });
     }
     loadAdminSection('board');
     return true;
@@ -326,14 +440,18 @@ function showColumnForm(col, groupId, groupName) {
 
 // ===== Transitions =====
 async function loadTransitions(content) {
+  const allBoards = await apiFetch('/api/boards');
+  if (!allBoards.find(b => b.id === adminBoardId)) adminBoardId = allBoards[0]?.id || 1;
+
   const [groups, transitions] = await Promise.all([
-    apiFetch('/api/groups'),
-    apiFetch('/api/transitions'),
+    apiFetch(`/api/groups?board_id=${adminBoardId}`),
+    apiFetch(`/api/transitions?board_id=${adminBoardId}`),
   ]);
 
   content.innerHTML = `
     <div class="admin-section">
       <div class="admin-section-title">Übergänge</div>
+      ${renderBoardSelector(allBoards, adminBoardId, null)}
       <p style="font-size:13px;color:var(--secondary);margin-bottom:16px">
         Felder, die beim Verlassen einer Gruppe ausgefüllt werden müssen.
         Jeder Übergang hat einen Namen und eine optionale Quellgruppe (die verlassene Gruppe).
@@ -344,6 +462,15 @@ async function loadTransitions(content) {
       </div>
     </div>
   `;
+
+  const boardSel = document.getElementById('admin-board-selector');
+  if (boardSel) {
+    boardSel.addEventListener('change', () => {
+      adminBoardId = parseInt(boardSel.value, 10);
+      localStorage.setItem('adminBoardId', adminBoardId);
+      loadTransitions(content);
+    });
+  }
 
   document.getElementById('add-transition-btn').addEventListener('click', () => showTransitionForm(null, groups));
   setupTransitionHandlers(transitions, groups);
@@ -674,15 +801,19 @@ function showEmailTemplateForm(tpl) {
 
 // ===== Email Rules =====
 async function loadEmailRules(content) {
+  const allBoards = await apiFetch('/api/boards');
+  if (!allBoards.find(b => b.id === adminBoardId)) adminBoardId = allBoards[0]?.id || 1;
+
   const [rules, groups, templates] = await Promise.all([
-    apiFetch('/api/email-rules'),
-    apiFetch('/api/groups'),
+    apiFetch(`/api/email-rules?board_id=${adminBoardId}`),
+    apiFetch(`/api/groups?board_id=${adminBoardId}`),
     apiFetch('/api/email-rules/templates'),
   ]);
 
   content.innerHTML = `
     <div class="admin-section">
       <div class="admin-section-title">E-Mail Regeln</div>
+      ${renderBoardSelector(allBoards, adminBoardId, null)}
       <button class="btn btn-primary btn-sm" id="add-rule-btn">+ Neue Regel</button>
       <table style="margin-top:16px">
         <thead><tr><th>Name</th><th>Von Gruppe</th><th>Nach Gruppe</th><th>Empfänger</th><th>Aktiv</th><th>Aktionen</th></tr></thead>
@@ -704,6 +835,15 @@ async function loadEmailRules(content) {
       </table>
     </div>
   `;
+
+  const boardSel = document.getElementById('admin-board-selector');
+  if (boardSel) {
+    boardSel.addEventListener('change', () => {
+      adminBoardId = parseInt(boardSel.value, 10);
+      localStorage.setItem('adminBoardId', adminBoardId);
+      loadEmailRules(content);
+    });
+  }
 
   document.getElementById('add-rule-btn').addEventListener('click', () => showEmailRuleForm(null, groups, templates));
 

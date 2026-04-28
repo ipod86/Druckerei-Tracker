@@ -5,14 +5,23 @@ const router = express.Router();
 const db = require('../db/database');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 
-// GET / - all named transitions with their fields
+// GET / - all named transitions with their fields (optional ?board_id=)
 router.get('/', requireAuth, (req, res) => {
-  const transitions = db.prepare(`
-    SELECT t.*, g1.name as from_group_name
-    FROM transitions t
-    JOIN groups g1 ON t.from_group_id = g1.id
-    ORDER BY t.from_group_id, t.order_index, t.id
-  `).all();
+  const { board_id } = req.query;
+  const transitions = board_id
+    ? db.prepare(`
+        SELECT t.*, g1.name as from_group_name
+        FROM transitions t
+        JOIN groups g1 ON t.from_group_id = g1.id
+        WHERE g1.board_id = ?
+        ORDER BY t.from_group_id, t.order_index, t.id
+      `).all(board_id)
+    : db.prepare(`
+        SELECT t.*, g1.name as from_group_name
+        FROM transitions t
+        JOIN groups g1 ON t.from_group_id = g1.id
+        ORDER BY t.from_group_id, t.order_index, t.id
+      `).all();
 
   for (const t of transitions) {
     const fields = db.prepare(`

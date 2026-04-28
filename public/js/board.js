@@ -2,6 +2,7 @@
 
 let boardData = null;
 let boardFilters = { label_id: '', user_id: '' };
+let currentBoardId = parseInt(localStorage.getItem('currentBoardId') || '1', 10);
 let dragState = null;
 let _boardDragging = false;
 
@@ -64,7 +65,9 @@ window.loadBoard = async function() {
   const container = document.getElementById('page-board');
   container.innerHTML = `
     <div class="board-filter-bar">
-      <strong style="font-size:13px;margin-right:4px">Board</strong>
+      <select id="board-switcher" style="font-weight:600;min-width:120px">
+        <option value="">Lädt…</option>
+      </select>
       <select id="board-filter-label">
         <option value="">Alle Labels</option>
       </select>
@@ -78,12 +81,28 @@ window.loadBoard = async function() {
     </div>
   `;
 
-  // Load filter options
+  // Load boards + filter options
   try {
-    const [labels, users] = await Promise.all([
+    const [boards, labels, users] = await Promise.all([
+      apiFetch('/api/boards'),
       apiFetch('/api/labels'),
       currentUser.role === 'admin' ? apiFetch('/api/users') : Promise.resolve([]),
     ]);
+
+    // Board switcher
+    const boardSel = document.getElementById('board-switcher');
+    boardSel.innerHTML = boards.map(b =>
+      `<option value="${b.id}" ${b.id === currentBoardId ? 'selected' : ''}>${escapeHtml(b.name)}</option>`
+    ).join('');
+    if (!boards.find(b => b.id === currentBoardId) && boards.length > 0) {
+      currentBoardId = boards[0].id;
+      boardSel.value = currentBoardId;
+    }
+    boardSel.addEventListener('change', () => {
+      currentBoardId = parseInt(boardSel.value, 10);
+      localStorage.setItem('currentBoardId', currentBoardId);
+      fetchAndRenderBoard();
+    });
 
     const lblSel = document.getElementById('board-filter-label');
     labels.forEach(l => {
@@ -110,6 +129,7 @@ window.loadBoard = async function() {
 async function fetchAndRenderBoard() {
   try {
     const params = new URLSearchParams();
+    params.set('board_id', currentBoardId);
     if (boardFilters.label_id) params.set('label_id', boardFilters.label_id);
     if (boardFilters.user_id) params.set('user_id', boardFilters.user_id);
 
@@ -840,6 +860,7 @@ let _pollInterval = null;
 async function silentBoardRefresh() {
   try {
     const params = new URLSearchParams();
+    params.set('board_id', currentBoardId);
     if (boardFilters.label_id) params.set('label_id', boardFilters.label_id);
     if (boardFilters.user_id) params.set('user_id', boardFilters.user_id);
     const newData = await apiFetch(`/api/cards/board?${params.toString()}`);
@@ -869,7 +890,7 @@ function startBoardPolling() {
   _pollInterval = setInterval(async () => {
     if (_boardDragging) return;
     try {
-      const { ts } = await apiFetch('/api/cards/last-updated');
+      const { ts } = await apiFetch(`/api/cards/last-updated?board_id=${currentBoardId}`);
       if (_lastBoardTs === null) { _lastBoardTs = ts; return; }
       if (ts && ts !== _lastBoardTs) {
         _lastBoardTs = ts;

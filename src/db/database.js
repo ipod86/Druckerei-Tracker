@@ -137,4 +137,19 @@ try {
 try { db.exec('ALTER TABLE cards ADD COLUMN ghl_opportunity_id TEXT DEFAULT NULL'); } catch (_) {}
 try { db.exec('ALTER TABLE cards ADD COLUMN company_id INTEGER REFERENCES companies(id)'); } catch (_) {}
 
+// Multi-board support
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS boards (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      order_index INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    INSERT OR IGNORE INTO boards (id, name, order_index) VALUES (1, 'Board 1', 0);
+  `);
+} catch (_) {}
+try { db.exec('ALTER TABLE groups ADD COLUMN board_id INTEGER DEFAULT 1'); } catch (_) {}
+try { db.exec('UPDATE groups SET board_id = 1 WHERE board_id IS NULL'); } catch (_) {}
+
 module.exports = db;

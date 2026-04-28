@@ -58,7 +58,13 @@ function triggerEmailRules(cardId, fromGroupId, toGroupId) {
 
 // GET /last-updated — lightweight polling endpoint
 router.get('/last-updated', requireAuth, (req, res) => {
-  const row = db.prepare('SELECT MAX(updated_at) as ts FROM cards WHERE archived = 0').get();
+  const { board_id } = req.query;
+  const row = board_id
+    ? db.prepare(`SELECT MAX(ca.updated_at) as ts FROM cards ca
+        JOIN columns col ON ca.column_id = col.id
+        JOIN groups g ON col.group_id = g.id
+        WHERE ca.archived = 0 AND g.board_id = ?`).get(board_id)
+    : db.prepare('SELECT MAX(updated_at) as ts FROM cards WHERE archived = 0').get();
   res.json({ ts: row?.ts || null });
 });
 
@@ -121,7 +127,7 @@ router.get('/', requireAuth, (req, res) => {
 
 // GET /board - cards grouped by column
 router.get('/board', requireAuth, (req, res) => {
-  const { location_id, label_id, user_id } = req.query;
+  const { location_id, label_id, user_id, board_id } = req.query;
 
   let cardQuery = `
     SELECT ca.*, col.name as column_name, col.group_id, col.time_limit_hours, col.time_limit_days, col.escalation_time,
@@ -144,6 +150,7 @@ router.get('/board', requireAuth, (req, res) => {
   `;
   const params = [];
 
+  if (board_id) { cardQuery += ' AND g.board_id = ?'; params.push(board_id); }
   if (location_id) { cardQuery += ' AND ca.location_id = ?'; params.push(location_id); }
   if (user_id) { cardQuery += ' AND ca.created_by = ?'; params.push(user_id); }
   if (label_id) {
@@ -167,8 +174,13 @@ router.get('/board', requireAuth, (req, res) => {
     byColumn[card.column_id].push(card);
   }
 
-  const groups = db.prepare('SELECT * FROM groups ORDER BY order_index').all();
-  const columns = db.prepare('SELECT c.*, g.name as group_name, g.color as group_color, g.order_index as group_order FROM columns c JOIN groups g ON c.group_id = g.id ORDER BY g.order_index, c.order_index').all();
+  const groups = board_id
+    ? db.prepare('SELECT * FROM groups WHERE board_id = ? ORDER BY order_index').all(board_id)
+    : db.prepare('SELECT * FROM groups ORDER BY order_index').all();
+  const groupIds = groups.map(g => g.id);
+  const columns = groupIds.length
+    ? db.prepare(`SELECT c.*, g.name as group_name, g.color as group_color, g.order_index as group_order FROM columns c JOIN groups g ON c.group_id = g.id WHERE g.id IN (${groupIds.map(() => '?').join(',')}) ORDER BY g.order_index, c.order_index`).all(...groupIds)
+    : [];
 
   res.json({
     groups,

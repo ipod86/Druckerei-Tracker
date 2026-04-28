@@ -5,9 +5,12 @@ const router = express.Router();
 const db = require('../db/database');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 
-// GET / - all groups with their columns
+// GET / - all groups with their columns (optional ?board_id=)
 router.get('/', requireAuth, (req, res) => {
-  const groups = db.prepare('SELECT * FROM groups ORDER BY order_index').all();
+  const { board_id } = req.query;
+  const groups = board_id
+    ? db.prepare('SELECT * FROM groups WHERE board_id = ? ORDER BY order_index').all(board_id)
+    : db.prepare('SELECT * FROM groups ORDER BY order_index').all();
   const columns = db.prepare('SELECT * FROM columns ORDER BY order_index').all();
 
   const result = groups.map(g => ({
@@ -19,14 +22,15 @@ router.get('/', requireAuth, (req, res) => {
 
 // POST / - create group
 router.post('/', requireAdmin, (req, res) => {
-  const { name, color, description } = req.body;
+  const { name, color, description, board_id } = req.body;
   if (!name) return res.status(400).json({ error: 'Name required' });
 
-  const maxOrder = db.prepare('SELECT MAX(order_index) as mx FROM groups').get();
+  const bid = board_id || 1;
+  const maxOrder = db.prepare('SELECT MAX(order_index) as mx FROM groups WHERE board_id = ?').get(bid);
   const order_index = (maxOrder.mx || 0) + 1;
 
-  const result = db.prepare('INSERT INTO groups (name, order_index, color, description) VALUES (?, ?, ?, ?)')
-    .run(name, order_index, color || '#4a90d9', description || null);
+  const result = db.prepare('INSERT INTO groups (name, order_index, color, description, board_id) VALUES (?, ?, ?, ?, ?)')
+    .run(name, order_index, color || '#4a90d9', description || null, bid);
 
   const group = db.prepare('SELECT * FROM groups WHERE id = ?').get(result.lastInsertRowid);
   res.status(201).json({ ...group, columns: [] });
